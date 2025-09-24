@@ -5,7 +5,8 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import {ERC20Votes} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
-import {Pausable} from "@openzeppelin/contracts/security/Pausable.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
 
 contract GovernanceToken is ERC20, ERC20Permit, ERC20Votes, AccessControl, Pausable {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
@@ -28,6 +29,12 @@ contract GovernanceToken is ERC20, ERC20Permit, ERC20Votes, AccessControl, Pausa
         _mint(to, amount);
         emit MintedOnDonation(to, amount, donationId);
     }
+
+    // Override nonces to resolve conflict between ERC20Permit and Nonces
+    function nonces(address owner)
+        public view override(ERC20Permit, Nonces)
+        returns (uint256)
+    { return super.nonces(owner); } // Delegates to ERC20Permit.nonces
 
     // --- OZ hooks
     function _update(address from, address to, uint256 value)

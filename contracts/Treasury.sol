@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 interface IGovToken {
@@ -41,7 +41,7 @@ contract Treasury is AccessControl, ReentrancyGuard {
         require(msg.value > 0, "zero ETH");
         require(mintRate > 0, "mintRate=0");
 
-        uint256 mintAmount = msg.value * mintRate;
+        uint256 mintAmount = msg.value * mintRate / 1e18; // Scale to get 1 GOV per 1 ETH
         bytes32 donationId = keccak256(abi.encode(msg.sender, block.number, msg.value));
 
         gov.mintOnDonation(msg.sender, mintAmount, donationId);
