@@ -13,7 +13,6 @@ On‑chain Charity DAO treasury and grants system using token-based governance w
 
 * CharityGovToken – ERC20Votes governance token. Ownership is transferred to the Governor; minting is governance-gated.
 * CharityGovernor – OpenZeppelin Governor variant with TimelockControl.
-* CharityTimelock – OpenZeppelin TimelockController; queues and executes approved operations.
 * ReputationOracleMock – Tracks/attests contributor reputation (mocked for tests).
 * NGOOracleMock – Approves NGO addresses and records metadata.
 * MilestoneOracleMock – Sets per-project milestone allocations and verifies completion indices.
@@ -30,6 +29,8 @@ Try running some of the following tasks:
 ```shell
 npx hardhat help
 npx hardhat test
+npx hardhat clean
+npx hardhat compile
 npx hardhat coverage (**NOTE: TRY THIS TO SEE CODE COVERAGE**)
 REPORT_GAS=true npx hardhat test
 npx hardhat node
@@ -54,7 +55,7 @@ Our project is a Charity DAO:
     * But it cannot spend money immediately — it can only instruct the next layer (Timelock).
     * Think of it as “Parliament”: they decide but cannot act instantly.
 
-3. CharityTimelock
+3. Timelock (OpenZeppelin)
     * The executor with a delay.
     * It enforces a waiting period between approval and action, so the community can react if something strange is passed.
     * Example: if a malicious proposal sneaks through, people have time to withdraw before execution.
