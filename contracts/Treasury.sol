@@ -1,52 +1,135 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.20;
 
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "./Interfaces.sol";
+import "./MilestoneOracleMock.sol";
+import "./ProjectRegistry.sol";
 
-interface IGovToken {
-    function mintOnDonation(address to, uint256 amount, bytes32 donationId) external;
-    function MINTER_ROLE() external view returns (bytes32);
-}
+contract Treasury is ReentrancyGuard {
+    IGovernance public immutable governance;
+    IRoundManager public immutable roundManager;
+    MilestoneOracleMock public immutable milestoneOracle;
+    ProjectRegistry public immutable projectRegistry;
+    address public immutable reserve;
 
-contract Treasury is AccessControl, ReentrancyGuard {
-    bytes32 public constant DAO_ADMIN = DEFAULT_ADMIN_ROLE;
-    IGovToken public immutable gov;
+    mapping(uint256 => uint256) public allocations; // Project ID => allocated amount
+    mapping(uint256 => uint256) public claimed; // Project ID => claimed amount
 
-    uint256 public mintRate; // GOV tokens per wei (e.g. 1e18 => 1 ETH = 1 GOV)
+    uint256 public totalAllocatedAllRounds;
+    uint256 public totalClaimedAllProjects;
 
-    event DonationReceived(address indexed donor, uint256 amountETH, uint256 tokens, bytes32 donationId);
-    event MintRateUpdated(uint256 newRate);
+    event Deposited(address indexed donor, uint256 amount);
+    event RoundFinalized(uint256 indexed roundId, uint256 totalAllocated);
+    event Claimed(uint256 indexed projectId, address indexed ngo, uint256 amount);
 
-    constructor(address admin, address govToken, uint256 initialRate) {
-        _grantRole(DAO_ADMIN, admin);
-        gov = IGovToken(govToken);
-        mintRate = initialRate;
+    constructor(
+        IGovernance _governance,
+        IRoundManager _roundManager,
+        MilestoneOracleMock _milestoneOracle,
+        ProjectRegistry _projectRegistry,
+        address _reserve
+    ) {
+        governance = _governance;
+        roundManager = _roundManager;
+        milestoneOracle = _milestoneOracle;
+        projectRegistry = _projectRegistry;
+        reserve = _reserve;
     }
 
-    function setMintRate(uint256 newRate) external onlyRole(DAO_ADMIN) {
-        mintRate = newRate;
-        emit MintRateUpdated(newRate);
+    modifier onlyGovernance() {
+        require(msg.sender == address(governance) || msg.sender == governance.timelock(), "Only governance");
+        _;
+    }
+
+    function deposit() external payable nonReentrant {
+        require(msg.value > 0, "No funds sent");
+        emit Deposited(msg.sender, msg.value);
+    }
+
+    function finalizeRound(uint256 roundId) external onlyGovernance nonReentrant {
+        (bool isActive, ) = roundManager.rounds(roundId);
+        require(!isActive, "Round still active");
+
+        uint256[] memory projectIds = projectRegistry.getActiveProjects();
+
+        uint256 totalVotes;
+        uint256[] memory votes = new uint256[](projectIds.length);
+        for (uint256 i = 0; i < projectIds.length; i++) {
+            votes[i] = roundManager.projectVotes(roundId, projectIds[i]);
+            totalVotes += votes[i];
+        }
+
+        uint256 reserved = totalAllocatedAllRounds - totalClaimedAllProjects;
+        uint256 vault = address(this).balance;
+        require(vault >= reserved, "vault underflow");
+        uint256 free = vault - reserved;
+
+        if (totalVotes == 0 || free == 0) {
+            if (free > 0) {
+                (bool sent, ) = reserve.call{value: free}("");
+                require(sent, "Reserve transfer failed");
+            }
+            emit RoundFinalized(roundId, 0);
+            return;
+        }
+
+        uint256 roundAllocated;
+        for (uint256 i = 0; i < projectIds.length; i++) {
+            if (votes[i] > 0) {
+                uint256 allocation = (free * votes[i]) / totalVotes;
+                if (allocation > 0) {
+                    allocations[projectIds[i]] += allocation;
+                    roundAllocated += allocation;
+                }
+            }
+        }
+
+        if (free > roundAllocated) {
+            uint256 dust = free - roundAllocated;
+            (bool sent, ) = reserve.call{value: dust}("");
+            require(sent, "Dust transfer failed");
+        }
+
+        totalAllocatedAllRounds += roundAllocated;
+
+        emit RoundFinalized(roundId, roundAllocated);
+    }
+
+    function claim(uint256 projectId) external nonReentrant {
+        (address ngo, , ProjectRegistry.ProjectStatus status) = projectRegistry.projects(projectId);
+        require(status == ProjectRegistry.ProjectStatus.Active, "Project not active");
+        require(msg.sender == ngo, "Only project NGO can claim");
+
+        uint256 alloc = allocations[projectId];
+        require(alloc > 0, "No allocation");
+
+        MilestoneOracleMock.Milestone[] memory milestones = milestoneOracle.getProjectMilestones(projectId);
+        require(milestones.length > 0, "No milestones");
+
+        uint256 verifiedPercent;
+        for (uint256 i = 0; i < milestones.length; i++) {
+            if (milestones[i].verified) {
+                verifiedPercent += milestones[i].percentage;
+            }
+        }
+        require(verifiedPercent <= 100, "Bad oracle data");
+
+        uint256 entitled = (alloc * verifiedPercent) / 100;
+        uint256 already = claimed[projectId];
+        require(entitled > already, "No claimable funds");
+
+        uint256 payout = entitled - already;
+        claimed[projectId] = entitled;
+        totalClaimedAllProjects += payout;
+
+        (bool sent, ) = msg.sender.call{value: payout}("");
+        require(sent, "Claim transfer failed");
+
+        emit Claimed(projectId, msg.sender, payout);
     }
 
     receive() external payable {
-        _donate();
-    }
-
-    function donateETH() external payable nonReentrant {
-        _donate();
-    }
-
-    function _donate() internal {
-        require(msg.value > 0, "zero ETH");
-        require(mintRate > 0, "mintRate=0");
-
-        uint256 mintAmount = msg.value * mintRate / 1e18; // Scale to get 1 GOV per 1 ETH
-        bytes32 donationId = keccak256(abi.encode(msg.sender, block.number, msg.value));
-
-        gov.mintOnDonation(msg.sender, mintAmount, donationId);
-
-        emit DonationReceived(msg.sender, msg.value, mintAmount, donationId);
-        // ETH stays in contract for later disbursement
+        revert("Use deposit() instead of sending ETH directly");
     }
 }
