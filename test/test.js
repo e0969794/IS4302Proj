@@ -4,12 +4,13 @@ const { ethers } = require("hardhat");
 describe("CharityDAO Contracts", function () {
   let GovernanceToken, Treasury;
   let govToken, treasury;
-  let admin, donor1, donor2;
+  let admin, ngo, donor1, donor2;
   let initialMintRate = ethers.parseEther("1"); // 1 GOV per 1 ETH
 
   beforeEach(async function () {
     // Get signers
-    [admin, donor1, donor2] = await ethers.getSigners();
+    //[admin, donor1, donor2] = await ethers.getSigners();
+    [admin, ngo, donor1, donor2] = await ethers.getSigners();
 
     // Deploy GovernanceToken
     GovernanceToken = await ethers.getContractFactory("GovernanceToken");
@@ -22,6 +23,9 @@ describe("CharityDAO Contracts", function () {
     // Now grant MINTER_ROLE to Treasury
     const MINTER_ROLE = await govToken.MINTER_ROLE();
     await govToken.connect(admin).grantRole(MINTER_ROLE, treasury.target);
+
+    // Deploy Proposal
+    Proposal = await ethers.getContractFactory("Proposal");
   });
 
   describe("GovernanceToken", function () {
@@ -168,4 +172,48 @@ describe("CharityDAO Contracts", function () {
         await expect(treasury.connect(donor1).donateETH({ value: ethers.parseEther("1") })).to.be.revertedWith("mintRate=0");
     });
   });
+    describe("Proposal creation", function () {
+    let proposalAddress, proposal;
+    const milestonesDesc = ["Build school", "Purchase books"];
+    const milestonesAmt = [ethers.parseEther("1"), ethers.parseEther("2")];
+    const totalFunds = ethers.parseEther("3");
+
+    beforeEach(async function () {
+        const tx = await treasury.connect(ngo).createProposal(totalFunds, milestonesDesc, milestonesAmt);
+        const receipt = await tx.wait();
+
+        const event = receipt.logs
+        .map(log => {
+            try { return treasury.interface.parseLog(log); } 
+            catch { return null; }
+        })
+        .filter(e => e && e.name === "ProposalCreated")[0];
+
+        if (!event) throw new Error("ProposalCreated event not found");
+        proposalAddress = event.args.proposalAddress;
+
+        proposal = Proposal.attach(proposalAddress);
+    });
+
+    it("Should create proposal given the correct details", async function () {
+        expect(await proposal.ngo()).to.equal(ngo.address);
+        expect(await proposal.treasury()).to.equal(treasury.target);
+        expect(await proposal.totalFunds()).to.equal(totalFunds);
+        expect(await proposal.fundsDisbursed()).to.equal(0);
+        expect(await proposal.isApproved()).to.equal(false);
+        expect(await proposal.milestoneCount()).to.equal(2);
+
+        const milestone0 = await proposal.getMilestone(0);
+        expect(milestone0.description).to.equal("Build school");
+        expect(milestone0.amount).to.equal(milestonesAmt[0]);
+        expect(milestone0.completed).to.equal(false);
+        expect(milestone0.released).to.equal(false);
+    });
+    it("Should allow treasury/admin to approve the proposal", async function () {
+        expect(await proposal.isApproved()).to.equal(false);
+        const proposalId = 1;
+        await treasury.connect(admin).approveProposal(proposalId);
+        expect(await proposal.isApproved()).to.equal(true);
+    });
+    });
 });

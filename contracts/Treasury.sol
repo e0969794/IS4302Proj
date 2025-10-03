@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import "./Proposal.sol";
 
 interface IGovToken {
     function mintOnDonation(address to, uint256 amount, bytes32 donationId) external;
@@ -14,14 +15,20 @@ contract Treasury is AccessControl, ReentrancyGuard {
     IGovToken public immutable gov;
 
     uint256 public mintRate; // GOV tokens per wei (e.g. 1e18 => 1 ETH = 1 GOV)
+    uint256 public nextProposalId;
+
+    mapping(uint256 => address) public proposals;
+    mapping(address => uint256[]) public ngoProposals;
 
     event DonationReceived(address indexed donor, uint256 amountETH, uint256 tokens, bytes32 donationId);
     event MintRateUpdated(uint256 newRate);
+    event ProposalCreated(uint256 indexed proposalId, address proposalAddress, address ngo);
 
     constructor(address admin, address govToken, uint256 initialRate) {
         _grantRole(DAO_ADMIN, admin);
         gov = IGovToken(govToken);
         mintRate = initialRate;
+        nextProposalId = 1;
     }
 
     function setMintRate(uint256 newRate) external onlyRole(DAO_ADMIN) {
@@ -49,4 +56,42 @@ contract Treasury is AccessControl, ReentrancyGuard {
         emit DonationReceived(msg.sender, msg.value, mintAmount, donationId);
         // ETH stays in contract for later disbursement
     }
+
+    function createProposal(uint256 totalFunds, string[] memory milestoneDescriptions, uint256[] memory milestoneAmounts) external returns (address) {
+        require(milestoneDescriptions.length == milestoneAmounts.length, "Mismatched milestones");
+
+        uint256 proposalId = nextProposalId;
+        Proposal proposal = new Proposal(
+            proposalId,
+            msg.sender,       
+            address(this),   
+            totalFunds,      
+            milestoneDescriptions,
+            milestoneAmounts
+        );
+
+        proposals[proposalId] = address(proposal);
+        ngoProposals[msg.sender].push(proposalId);
+
+        emit ProposalCreated(proposalId, address(proposal), msg.sender);
+        nextProposalId++;
+
+        return address(proposal);
+    }
+
+    function getProposalsByNGO(address ngo) external view returns (uint256[] memory) {
+        return ngoProposals[ngo];
+    }
+
+    function approveProposal(uint256 proposalId) external onlyRole(DAO_ADMIN) {
+        address proposalAddr = proposals[proposalId];
+        require(proposalAddr != address(0), "Proposal does not exist");
+        Proposal(payable(proposalAddr)).approveProposal();
+    }
+
+    // function disburseMilestoneFunds(uint256 proposalId, uint index) external onlyRole(DAO_ADMIN) {
+    //     address proposalAddr = proposals[proposalId];
+    //     Proposal proposal = Proposal(payable(proposalAddr));
+    //     proposal.releaseFunds(index);
+    // }   
 }
