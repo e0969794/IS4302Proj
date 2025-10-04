@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+// import "./oracle.sol"
+
 contract Proposal {
     uint256 public proposalID;
     address public ngo;
