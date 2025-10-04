@@ -12,6 +12,8 @@ contract Proposal is AccessControl {
     uint256 public totalFunds;
     uint256 public fundsDisbursed;
     bool public isApproved;
+    
+    bytes32 public constant DAO_ADMIN = keccak256("DAO_ADMIN");
 
 
     struct Milestone {
@@ -33,8 +35,11 @@ contract Proposal is AccessControl {
         _;
     }
 
-    constructor(uint256 _proposalID, address _ngo, address _treasury, uint256 _totalFunds, string[] memory _milestoneDescriptions, uint256[] memory _milestoneAmounts) {
+    constructor(uint256 _proposalID, address _ngo, address _treasury, uint256 _totalFunds, string[] memory _milestoneDescriptions, uint256[] memory _milestoneAmounts, address admin, address proposalManager) {
         require(_milestoneDescriptions.length == _milestoneAmounts.length, "Mismatched milestones");
+        _grantRole(DEFAULT_ADMIN_ROLE, admin);
+        _grantRole(DAO_ADMIN, admin);
+        _grantRole(DAO_ADMIN, proposalManager);
         proposalID = _proposalID;
         ngo = _ngo;
         treasury = _treasury;

@@ -11,6 +11,7 @@ interface ITreasury {
 contract ProposalManager is AccessControl {
     ITreasury public immutable treasury;
     uint256 public nextProposalId;
+    address public admin;
 
     // proposalId -> proposalAddress
     mapping(uint256 => address) public proposals;
@@ -20,9 +21,11 @@ contract ProposalManager is AccessControl {
     event ProposalCreated(uint256 indexed proposalId, address proposalAddress, address ngo);
     event ProposalApproved(uint256 indexed proposalId, address approver);
 
-    constructor(address admin, address treasury_) {
+    constructor(address _admin, address treasury_) {
+        admin = _admin;
         treasury = ITreasury(treasury_);
-        _grantRole(treasury.DAO_ADMIN(), admin);
+        _grantRole(DEFAULT_ADMIN_ROLE, _admin);
+        _grantRole(treasury.DAO_ADMIN(), _admin);
         nextProposalId = 1;
     }
 
@@ -44,7 +47,9 @@ contract ProposalManager is AccessControl {
             address(treasury),
             totalFunds,
             milestoneDescriptions,
-            milestoneAmounts
+            milestoneAmounts,
+            admin,
+            address(this)
         );
 
         proposals[proposalId] = address(proposal);

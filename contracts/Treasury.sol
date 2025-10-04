@@ -12,6 +12,8 @@ interface IGovToken {
 
 contract Treasury is AccessControl, ReentrancyGuard {
     bytes32 public constant TREASURY_ROLE = keccak256("TREASURY");
+    bytes32 public constant DAO_ADMIN = keccak256("DAO_ADMIN");
+
     IGovToken public immutable gov;
 
     uint256 public mintRate; // GOV tokens per wei (e.g. 1e18 => 1 ETH = 1 GOV)
@@ -20,6 +22,8 @@ contract Treasury is AccessControl, ReentrancyGuard {
     event MintRateUpdated(uint256 newRate);
 
     constructor(address admin, address govToken, uint256 initialRate) {
+        _grantRole(DEFAULT_ADMIN_ROLE, admin);
+        _grantRole(DAO_ADMIN, admin);
         _grantRole(TREASURY_ROLE, admin);
         gov = IGovToken(govToken);
         mintRate = initialRate;

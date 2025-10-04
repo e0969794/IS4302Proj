@@ -34,6 +34,8 @@ describe("CharityDAO Contracts", function () {
 
     // Deploy Proposal
     Proposal = await ethers.getContractFactory("Proposal");
+    //await proposal.connect(admin).grantRole(DAO_ADMIN, admin.address)
+
   });
 
   describe("GovernanceToken", function () {
