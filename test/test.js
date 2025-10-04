@@ -129,6 +129,7 @@ describe("CharityDAO Contracts", function () {
         .withArgs(donor1.address, donationAmount, expectedMint, donationId);
 
         expect(await govToken.balanceOf(donor1.address)).to.equal(expectedMint);
+        expect(await treasury.connect(donor1).getGovTokenBalance()).to.equal(expectedMint);
         expect(await ethers.provider.getBalance(treasury.target)).to.equal(donationAmount);
     });
 
