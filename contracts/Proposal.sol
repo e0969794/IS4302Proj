@@ -3,7 +3,9 @@ pragma solidity ^0.8.24;
 
 // import "./oracle.sol"
 
-contract Proposal {
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+
+contract Proposal is AccessControl {
     uint256 public proposalID;
     address public ngo;
     address public treasury;
@@ -20,11 +22,6 @@ contract Proposal {
         }
 
     Milestone[] public milestones;
-
-     modifier onlyTreasury() {
-        require(msg.sender == treasury, "Only the treasury is allowed to do this");
-        _;
-    }
 
     modifier onlyNGO() {
         require(msg.sender == ngo, "Only the NGO is allowed");
@@ -55,7 +52,7 @@ contract Proposal {
         }
     } 
 
-    function approveProposal() external onlyTreasury() {
+    function approveProposal() external onlyRole(DAO_ADMIN) {
         require(!isApproved, "Already approved");
         //Include oracle verification here
         isApproved = true;

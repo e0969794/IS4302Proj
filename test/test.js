@@ -2,8 +2,8 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
 describe("CharityDAO Contracts", function () {
-  let GovernanceToken, Treasury;
-  let govToken, treasury;
+  let GovernanceToken, Treasury, Proposal, ProposalManager;
+  let govToken, treasury, proposalManager;
   let admin, ngo, donor1, donor2;
   let initialMintRate = ethers.parseEther("1"); // 1 GOV per 1 ETH
 
@@ -19,10 +19,18 @@ describe("CharityDAO Contracts", function () {
     // Deploy Treasury
     Treasury = await ethers.getContractFactory("Treasury");
     treasury = await Treasury.deploy(admin.address, govToken.target, initialMintRate);
+    await treasury.waitForDeployment();
 
     // Now grant MINTER_ROLE to Treasury
     const MINTER_ROLE = await govToken.MINTER_ROLE();
     await govToken.connect(admin).grantRole(MINTER_ROLE, treasury.target);
+
+    // Deploy ProposalManager
+    ProposalManager = await ethers.getContractFactory("ProposalManager");
+    proposalManager = await ProposalManager.deploy(admin.address, treasury.target);
+
+    // Grant DAO_ADMIN to admin in ProposalManager
+    await proposalManager.connect(admin).grantRole(await treasury.DAO_ADMIN(), admin.address);
 
     // Deploy Proposal
     Proposal = await ethers.getContractFactory("Proposal");
@@ -149,19 +157,19 @@ describe("CharityDAO Contracts", function () {
         await expect(treasury.connect(donor1).donateETH({ value: ethers.parseEther("1") })).to.be.revertedWith("mintRate=0");
     });
   });
-    describe("Proposal creation", function () {
+    describe("ProposalManager", function () {
     let proposalAddress, proposal;
     const milestonesDesc = ["Build school", "Purchase books"];
     const milestonesAmt = [ethers.parseEther("1"), ethers.parseEther("2")];
     const totalFunds = ethers.parseEther("3");
 
     beforeEach(async function () {
-        const tx = await treasury.connect(ngo).createProposal(totalFunds, milestonesDesc, milestonesAmt);
+        const tx = await proposalManager.connect(ngo).createProposal(totalFunds, milestonesDesc, milestonesAmt);
         const receipt = await tx.wait();
 
         const event = receipt.logs
         .map(log => {
-            try { return treasury.interface.parseLog(log); } 
+            try { return proposalManager.interface.parseLog(log); } 
             catch { return null; }
         })
         .filter(e => e && e.name === "ProposalCreated")[0];
@@ -186,10 +194,10 @@ describe("CharityDAO Contracts", function () {
         expect(milestone0.completed).to.equal(false);
         expect(milestone0.released).to.equal(false);
     });
-    it("Should allow treasury/admin to approve the proposal", async function () {
+    it("Should allow ProposalManager to approve the proposal", async function () {
         expect(await proposal.isApproved()).to.equal(false);
         const proposalId = 1;
-        await treasury.connect(admin).approveProposal(proposalId);
+        await proposalManager.connect(admin).approveProposal(proposalId);
         expect(await proposal.isApproved()).to.equal(true);
     });
     });
