@@ -41,10 +41,6 @@ contract Treasury is AccessControl, ReentrancyGuard {
         emit MintRateUpdated(newRate);
     }
 
-    receive() external payable {
-        _donate();
-    }
-
     function donateETH() external payable nonReentrant {
         _donate();
     }
