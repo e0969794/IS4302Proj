@@ -8,6 +8,7 @@ import "./Proposal.sol";
 interface IGovToken {
     function mintOnDonation(address to, uint256 amount, bytes32 donationId) external;
     function MINTER_ROLE() external view returns (bytes32);
+    function balanceOf(address account) external view returns (uint256);
 }
 
 contract Treasury is AccessControl, ReentrancyGuard {
@@ -31,13 +32,13 @@ contract Treasury is AccessControl, ReentrancyGuard {
         nextProposalId = 1;
     }
 
+    function getGovTokenBalance() external view returns (uint256) {
+        return gov.balanceOf(msg.sender);
+    }
+
     function setMintRate(uint256 newRate) external onlyRole(DAO_ADMIN) {
         mintRate = newRate;
         emit MintRateUpdated(newRate);
-    }
-
-    receive() external payable {
-        _donate();
     }
 
     function donateETH() external payable nonReentrant {

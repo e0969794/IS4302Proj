@@ -129,42 +129,19 @@ describe("CharityDAO Contracts", function () {
         .withArgs(donor1.address, donationAmount, expectedMint, donationId);
 
         expect(await govToken.balanceOf(donor1.address)).to.equal(expectedMint);
+        expect(await treasury.connect(donor1).getGovTokenBalance()).to.equal(expectedMint);
         expect(await ethers.provider.getBalance(treasury.target)).to.equal(donationAmount);
     });
 
-    it("Should handle ETH donation via receive fallback", async function () {
+    it("should revert when ETH is sent directly to the Treasury", async function () {
         const donationAmount = ethers.parseEther("2");
         const expectedMint = donationAmount * initialMintRate / ethers.parseEther("1");
+        await expect(donor1.sendTransaction({ to: treasury.target, value: donationAmount })).to.be.reverted;
 
-        const tx = await donor1.sendTransaction({ to: treasury.target, value: donationAmount });
-        const receipt = await tx.wait();
-
-        // Parse the DonationReceived event using the contract's ABI
-        const donationReceivedEvent = receipt.logs.find(log => {
-            try {
-                const parsedLog = treasury.interface.parseLog(log);
-                return parsedLog?.name === "DonationReceived";
-            } catch {
-                return false; // Ignore logs that can't be parsed
-            }
-        });
-
-        if (!donationReceivedEvent) {
-            throw new Error("DonationReceived event not found in transaction receipt");
-        }
-        const parsedLog = treasury.interface.parseLog(donationReceivedEvent);
-        const donationId = parsedLog.args.donationId;
-
-        await expect(tx).to.emit(treasury, "DonationReceived")
-            .withArgs(donor1.address, donationAmount, expectedMint, donationId);
-
-        expect(await govToken.balanceOf(donor1.address)).to.equal(expectedMint);
-        expect(await ethers.provider.getBalance(treasury.target)).to.equal(donationAmount);
     });
 
     it("Should revert donation if zero ETH", async function () {
-        await expect(treasury.connect(donor1).donateETH({ value: 0 })).to.be.revertedWith("zero ETH");
-        await expect(donor1.sendTransaction({ to: treasury.target, value: 0 })).to.be.revertedWith("zero ETH");
+        await expect(treasury.connect(donor1).donateETH({ value: 0 })).to.be.revertedWith("zero ETH");;
     });
 
     it("Should revert donation if mintRate is zero", async function () {

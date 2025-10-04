@@ -18,6 +18,8 @@ contract GovernanceToken is ERC20, ERC20Permit, ERC20Votes, AccessControl, Pausa
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
     }
 
+    event MintedOnDonation(address indexed to, uint256 amount, bytes32 donationId);
+
     function pause() external onlyRole(DEFAULT_ADMIN_ROLE) { _pause(); }
     function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) { _unpause(); }
 
@@ -41,6 +43,4 @@ contract GovernanceToken is ERC20, ERC20Permit, ERC20Votes, AccessControl, Pausa
         internal override(ERC20, ERC20Votes)
         whenNotPaused
     { super._update(from, to, value); }
-
-    event MintedOnDonation(address indexed to, uint256 amount, bytes32 donationId);
 }
