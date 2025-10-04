@@ -149,6 +149,79 @@ describe("CharityDAO Contracts", function () {
         await expect(treasury.connect(donor1).donateETH({ value: ethers.parseEther("1") })).to.be.revertedWith("mintRate=0");
     });
   });
+  
+  describe("NGOOracleMock", function () {
+    let ngoOracle;
+    let deployer, verifiedNGO, unverifiedNGO;
+
+    beforeEach(async function () {
+        [deployer, verifiedNGO, unverifiedNGO] = await ethers.getSigners();
+
+        // Deploy the oracle contract
+        const NGOOracle = await ethers.getContractFactory("NGOOracle");
+        ngoOracle = await NGOOracle.deploy();
+        await ngoOracle.waitForDeployment();
+    });
+
+    it("should pre-approve 3 NGOs at deployment", async function () {
+        const ngo1 = "0x1111111111111111111111111111111111111111";
+        const ngo2 = "0x2222222222222222222222222222222222222222";
+        const ngo3 = "0x3333333333333333333333333333333333333333";
+
+        // Check they are approved
+        expect(await ngoOracle.approvedNGOs(ngo1)).to.equal(true);
+        expect(await ngoOracle.approvedNGOs(ngo2)).to.equal(true);
+        expect(await ngoOracle.approvedNGOs(ngo3)).to.equal(true);
+
+        // Check their details exist
+        const details1 = await ngoOracle.ngoDetails(ngo1);
+        const details2 = await ngoOracle.ngoDetails(ngo2);
+        const details3 = await ngoOracle.ngoDetails(ngo3);
+
+        expect(details1).to.contain("Red Cross");
+        expect(details2).to.contain("Save the Children");
+        expect(details3).to.contain("World Wildlife");
+    });
+
+    it("should return true and emit NGOVerified for verified NGO", async function () {
+        const verifiedAddress = "0x1111111111111111111111111111111111111111";
+
+        // Call verifyNGO
+        const tx = await ngoOracle.verifyNGO(verifiedAddress);
+        const receipt = await tx.wait();
+
+        // Should return true
+        const result = await ngoOracle.approvedNGOs(verifiedAddress);
+        expect(result).to.equal(true);
+
+        // Check emitted event
+        const event = receipt.logs.find(
+        (log) => log.fragment && log.fragment.name === "NGOVerified"
+        );
+        expect(event).to.not.be.undefined;
+        expect(event.args.ngo).to.equal(verifiedAddress);
+    });
+
+    it("should return false and emit NGORejected for unverified NGO", async function () {
+        const unverifiedAddress = unverifiedNGO.address;
+
+        // Call verifyNGO
+        const tx = await ngoOracle.verifyNGO(unverifiedAddress);
+        const receipt = await tx.wait();
+
+        // Check it returns false
+        const isApproved = await ngoOracle.approvedNGOs(unverifiedAddress);
+        expect(isApproved).to.equal(false);
+
+        // Check NGORejected event emitted
+        const event = receipt.logs.find(
+        (log) => log.fragment && log.fragment.name === "NGORejected"
+        );
+        expect(event).to.not.be.undefined;
+        expect(event.args.ngo).to.equal(unverifiedAddress);
+    });
+    });
+
     describe("Proposal creation", function () {
     let proposalAddress, proposal;
     const milestonesDesc = ["Build school", "Purchase books"];
