@@ -157,7 +157,7 @@ describe("CharityDAO Contracts", function () {
     beforeEach(async function () {
         [deployer, verifiedNGO, unverifiedNGO] = await ethers.getSigners();
 
-        // ✅ Deploy the oracle contract
+        // Deploy the oracle contract
         const NGOOracle = await ethers.getContractFactory("NGOOracle");
         ngoOracle = await NGOOracle.deploy();
         await ngoOracle.waitForDeployment();
