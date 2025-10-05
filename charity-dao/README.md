@@ -5,7 +5,6 @@ This guide explains how to set up and test the frontend for the Charity DAO appl
 ## Prerequisites
 - **Node.js**: Install Node.js (v18 or later) from [nodejs.org](https://nodejs.org/).
 - **MetaMask**: Install the MetaMask browser extension (see below).
-- **Git**: Install Git from [git-scm.com](https://git-scm.com/).
 - **Windows**: Commands are tailored for Windows PowerShell.
 
 ## Setup Instructions
