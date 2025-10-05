@@ -24,6 +24,7 @@ contract Treasury is AccessControl, ReentrancyGuard {
     event DonationReceived(address indexed donor, uint256 amountETH, uint256 tokens, bytes32 donationId);
     event MintRateUpdated(uint256 newRate);
     event ProposalCreated(uint256 indexed proposalId, address proposalAddress, address ngo);
+    event ProposalApproved(uint256 indexed proposalId);
 
     constructor(address admin, address govToken, uint256 initialRate) {
         _grantRole(DAO_ADMIN, admin);
@@ -58,7 +59,8 @@ contract Treasury is AccessControl, ReentrancyGuard {
         // ETH stays in contract for later disbursement
     }
 
-    function createProposal(uint256 totalFunds, string[] memory milestoneDescriptions, uint256[] memory milestoneAmounts) external returns (address) {
+    function createProposal(uint256 totalFunds, string[] memory milestoneDescriptions, uint256[] memory milestoneAmounts)
+    external returns (address) {
         require(milestoneDescriptions.length == milestoneAmounts.length, "Mismatched milestones");
 
         uint256 proposalId = nextProposalId;
@@ -84,10 +86,23 @@ contract Treasury is AccessControl, ReentrancyGuard {
         return ngoProposals[ngo];
     }
 
+    function getAllProposals() external view returns (uint256[] memory) {
+        if (nextProposalId == 1) {
+            return new uint256[](0); // Return empty array if no proposals
+        }
+        uint256[] memory allProposals = new uint256[](nextProposalId - 1);
+        for (uint256 i = 0; i < nextProposalId - 1; i++) {
+            allProposals[i] = i + 1; // IDs start at 1
+        }
+        return allProposals;
+    }
+
     function approveProposal(uint256 proposalId) external onlyRole(DAO_ADMIN) {
         address proposalAddr = proposals[proposalId];
         require(proposalAddr != address(0), "Proposal does not exist");
         Proposal(payable(proposalAddr)).approveProposal();
+
+        emit ProposalApproved(proposalId);
     }
 
     // function disburseMilestoneFunds(uint256 proposalId, uint index) external onlyRole(DAO_ADMIN) {

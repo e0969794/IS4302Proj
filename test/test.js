@@ -153,38 +153,43 @@ describe("CharityDAO Contracts", function () {
   describe("NGOOracleMock", function () {
     let ngoOracle;
     let deployer, verifiedNGO, unverifiedNGO;
+    let numNGOs = 3; // Number of NGO wallets to generate
+    let ngoDetails = [
+            "Red Cross International - Humanitarian aid and disaster relief",
+            "Save the Children - Education and health programs for children",
+            "World Wildlife Fund - Environmental conservation and research"
+        ];
+    let ngoWallets = [];
+    for (let i = 0; i < numNGOs; i++) {
+        const wallet = ethers.Wallet.createRandom();
+        ngoWallets.push({
+            address: wallet.address,
+            privateKey: wallet.privateKey
+        });
+    }
 
     beforeEach(async function () {
         [deployer, verifiedNGO, unverifiedNGO] = await ethers.getSigners();
 
         // Deploy the oracle contract
+        const ngoAddresses = ngoWallets.map(wallet => wallet.address);
         const NGOOracle = await ethers.getContractFactory("NGOOracle");
-        ngoOracle = await NGOOracle.deploy();
+        ngoOracle = await NGOOracle.deploy(ngoAddresses, ngoDetails.slice(0, numNGOs));
         await ngoOracle.waitForDeployment();
     });
 
     it("should pre-approve 3 NGOs at deployment", async function () {
-        const ngo1 = "0x1111111111111111111111111111111111111111";
-        const ngo2 = "0x2222222222222222222222222222222222222222";
-        const ngo3 = "0x3333333333333333333333333333333333333333";
-
-        // Check they are approved
-        expect(await ngoOracle.approvedNGOs(ngo1)).to.equal(true);
-        expect(await ngoOracle.approvedNGOs(ngo2)).to.equal(true);
-        expect(await ngoOracle.approvedNGOs(ngo3)).to.equal(true);
-
-        // Check their details exist
-        const details1 = await ngoOracle.ngoDetails(ngo1);
-        const details2 = await ngoOracle.ngoDetails(ngo2);
-        const details3 = await ngoOracle.ngoDetails(ngo3);
-
-        expect(details1).to.contain("Red Cross");
-        expect(details2).to.contain("Save the Children");
-        expect(details3).to.contain("World Wildlife");
+        ngoWallets.forEach(async (wallet, index) => {
+            // Check they are approved
+            expect(await ngoOracle.approvedNGOs(wallet.address)).to.equal(true);
+            // Check their details exist
+            const details = await ngoOracle.ngoDetails(wallet.address);
+            expect(details).to.contain(ngoDetails[index]);
+        });
     });
 
     it("should return true and emit NGOVerified for verified NGO", async function () {
-        const verifiedAddress = "0x1111111111111111111111111111111111111111";
+        const verifiedAddress = ngoWallets[0].address;
 
         // Call verifyNGO
         const tx = await ngoOracle.verifyNGO(verifiedAddress);
@@ -220,9 +225,9 @@ describe("CharityDAO Contracts", function () {
         expect(event).to.not.be.undefined;
         expect(event.args.ngo).to.equal(unverifiedAddress);
     });
-    });
+  });
 
-    describe("Proposal creation", function () {
+  describe("Proposal creation", function () {
     let proposalAddress, proposal;
     const milestonesDesc = ["Build school", "Purchase books"];
     const milestonesAmt = [ethers.parseEther("1"), ethers.parseEther("2")];
@@ -259,11 +264,12 @@ describe("CharityDAO Contracts", function () {
         expect(milestone0.completed).to.equal(false);
         expect(milestone0.released).to.equal(false);
     });
+    
     it("Should allow treasury/admin to approve the proposal", async function () {
         expect(await proposal.isApproved()).to.equal(false);
         const proposalId = 1;
         await treasury.connect(admin).approveProposal(proposalId);
         expect(await proposal.isApproved()).to.equal(true);
     });
-    });
+  });
 });
