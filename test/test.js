@@ -55,7 +55,9 @@ describe("CharityDAO Contracts", function () {
 
     // Grant DAO_ADMIN role to VotingManager so it can mark milestones as completed
     const DAO_ADMIN = await treasury.DAO_ADMIN();
-    await proposalManager.connect(admin).grantRole(DAO_ADMIN, votingManager.target);
+    await proposalManager
+      .connect(admin)
+      .grantRole(DAO_ADMIN, votingManager.target);
 
     // Deploy Proposal
     Proposal = await ethers.getContractFactory("Proposal");
@@ -457,13 +459,18 @@ describe("CharityDAO Contracts", function () {
         // donor3 has 25 GOV tokens = 25 * 1e18 credits
         // Trying to cast 6 votes would cost 6^2 = 36 credits (in base units)
         // But we need to account for the token decimals
-        const availableCredits = await votingManager.getAvailableCredits(donor3.address);
-        console.log("Available credits for donor3:", availableCredits.toString());
-        
+        const availableCredits = await votingManager.getAvailableCredits(
+          donor3.address
+        );
+        console.log(
+          "Available credits for donor3:",
+          availableCredits.toString()
+        );
+
         // Try to cast enough votes that would exceed their credits
         // donor3 has 25e18 credits, so casting 25e9 + 1 votes would cost (25e9+1)^2 which exceeds 25e18
         const votesToCast = Math.floor(Math.sqrt(Number(availableCredits))) + 1;
-        
+
         await expect(
           votingManager.connect(donor3).vote(proposalId, votesToCast)
         ).to.be.revertedWith("Insufficient credits");
@@ -509,7 +516,7 @@ describe("CharityDAO Contracts", function () {
         //                     0.002 ETH = 2e15 wei, threshold = 2e15/1e14 = 20 votes
 
         const testTotalFunds = ethers.parseEther("0.003");
-        
+
         // Get current proposal ID
         const currentProposalId = await proposalManager.nextProposalId();
         const testProposalId = currentProposalId;
@@ -534,7 +541,9 @@ describe("CharityDAO Contracts", function () {
 
         // Grant VotingManager DAO_ADMIN role on the proposal
         const DAO_ADMIN = await testProposal.DAO_ADMIN();
-        await testProposal.connect(admin).grantRole(DAO_ADMIN, votingManager.target);
+        await testProposal
+          .connect(admin)
+          .grantRole(DAO_ADMIN, votingManager.target);
 
         // Cast enough votes to unlock first milestone (need 10 votes)
         const initialTreasuryBalance = await ethers.provider.getBalance(
@@ -576,7 +585,7 @@ describe("CharityDAO Contracts", function () {
           ethers.parseEther("0.002"),
         ];
         const testTotalFunds = ethers.parseEther("0.003");
-        
+
         // Get current proposal ID
         const currentProposalId = await proposalManager.nextProposalId();
         const testProposalId = currentProposalId;
@@ -592,10 +601,14 @@ describe("CharityDAO Contracts", function () {
         await proposalManager.connect(admin).approveProposal(testProposalId);
 
         // Grant VotingManager DAO_ADMIN role on the proposal
-        const testProposalAddr = await proposalManager.getProposal(testProposalId);
+        const testProposalAddr = await proposalManager.getProposal(
+          testProposalId
+        );
         const testProposal = Proposal.attach(testProposalAddr);
         const DAO_ADMIN = await testProposal.DAO_ADMIN();
-        await testProposal.connect(admin).grantRole(DAO_ADMIN, votingManager.target);
+        await testProposal
+          .connect(admin)
+          .grantRole(DAO_ADMIN, votingManager.target);
 
         // Cast enough votes to unlock both milestones (need 20 votes for second milestone)
         const voteTx = await votingManager
@@ -620,7 +633,7 @@ describe("CharityDAO Contracts", function () {
         const testMilestonesDesc = ["Manual test"];
         const testMilestonesAmt = [ethers.parseEther("0.001")];
         const testTotalFunds = ethers.parseEther("0.001");
-        
+
         // Get current proposal ID
         const currentProposalId = await proposalManager.nextProposalId();
         const testProposalId = currentProposalId;
@@ -636,10 +649,14 @@ describe("CharityDAO Contracts", function () {
         await proposalManager.connect(admin).approveProposal(testProposalId);
 
         // Grant VotingManager DAO_ADMIN role on the proposal
-        const testProposalAddr = await proposalManager.getProposal(testProposalId);
+        const testProposalAddr = await proposalManager.getProposal(
+          testProposalId
+        );
         const testProposal = Proposal.attach(testProposalAddr);
         const DAO_ADMIN = await testProposal.DAO_ADMIN();
-        await testProposal.connect(admin).grantRole(DAO_ADMIN, votingManager.target);
+        await testProposal
+          .connect(admin)
+          .grantRole(DAO_ADMIN, votingManager.target);
 
         // Cast votes
         await votingManager.connect(donor1).vote(testProposalId, 10);
@@ -656,7 +673,7 @@ describe("CharityDAO Contracts", function () {
         const testMilestonesDesc = ["Multi-user test"];
         const testMilestonesAmt = [ethers.parseEther("0.002")]; // 20 votes needed
         const testTotalFunds = ethers.parseEther("0.002");
-        
+
         // Get current proposal ID
         const currentProposalId = await proposalManager.nextProposalId();
         const testProposalId = currentProposalId;
@@ -672,10 +689,14 @@ describe("CharityDAO Contracts", function () {
         await proposalManager.connect(admin).approveProposal(testProposalId);
 
         // Grant VotingManager DAO_ADMIN role on the proposal
-        const testProposalAddr = await proposalManager.getProposal(testProposalId);
+        const testProposalAddr = await proposalManager.getProposal(
+          testProposalId
+        );
         const testProposal = Proposal.attach(testProposalAddr);
         const DAO_ADMIN = await testProposal.DAO_ADMIN();
-        await testProposal.connect(admin).grantRole(DAO_ADMIN, votingManager.target);
+        await testProposal
+          .connect(admin)
+          .grantRole(DAO_ADMIN, votingManager.target);
 
         // Multiple users vote
         await votingManager.connect(donor1).vote(testProposalId, 8); // 8 votes, 64 credits
@@ -736,7 +757,7 @@ describe("CharityDAO Contracts", function () {
         const testMilestonesDesc = ["Treasury integration test"];
         const testMilestonesAmt = [ethers.parseEther("0.001")]; // 10 votes needed
         const testTotalFunds = ethers.parseEther("0.001");
-        
+
         // Get current proposal ID
         const currentProposalId = await proposalManager.nextProposalId();
         const testProposalId = currentProposalId;
@@ -752,10 +773,14 @@ describe("CharityDAO Contracts", function () {
         await proposalManager.connect(admin).approveProposal(testProposalId);
 
         // Grant VotingManager DAO_ADMIN role on the proposal
-        const testProposalAddr = await proposalManager.getProposal(testProposalId);
+        const testProposalAddr = await proposalManager.getProposal(
+          testProposalId
+        );
         const testProposal = Proposal.attach(testProposalAddr);
         const DAO_ADMIN = await testProposal.DAO_ADMIN();
-        await testProposal.connect(admin).grantRole(DAO_ADMIN, votingManager.target);
+        await testProposal
+          .connect(admin)
+          .grantRole(DAO_ADMIN, votingManager.target);
 
         const initialNgoBalance = await ethers.provider.getBalance(ngo.address);
         const initialTreasuryBalance = await ethers.provider.getBalance(
