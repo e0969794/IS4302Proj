@@ -113,7 +113,7 @@ contract VotingManager is AccessControl, ReentrancyGuard {
      */
     function vote(uint256 proposalId, uint256 additionalVotes) external nonReentrant {
         require(additionalVotes > 0, "Must cast at least 1 vote");
-        require(proposalManager.isProposalApproved(proposalId), "Proposal not approved");
+        require(proposalManager.getProposal(proposalId) != address(0), "Proposal does not exist");
         
         ProposalVoting storage proposalVoting = proposalVotes[proposalId];
         Vote storage userVote = proposalVoting.userVotes[msg.sender];

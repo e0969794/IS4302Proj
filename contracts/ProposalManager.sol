@@ -19,7 +19,6 @@ contract ProposalManager is AccessControl {
     mapping(address => uint256[]) public ngoProposals;
 
     event ProposalCreated(uint256 indexed proposalId, address proposalAddress, address ngo);
-    event ProposalApproved(uint256 indexed proposalId, address approver);
 
     constructor(address _admin, address treasury_) {
         admin = _admin;
@@ -65,36 +64,22 @@ contract ProposalManager is AccessControl {
         return ngoProposals[ngo];
     }
 
-    function approveProposal(uint256 proposalId) external onlyRole(treasury.DAO_ADMIN()) {
-        address proposalAddr = proposals[proposalId];
-        require(proposalAddr != address(0), "Proposal does not exist");
 
-        Proposal(payable(proposalAddr)).approveProposal();
 
-        emit ProposalApproved(proposalId, msg.sender);
-    }
-
-    function getApprovedProjects() external view returns (address[] memory) {
+    function getAllProjects() external view returns (address[] memory) {
         uint256 count = nextProposalId - 1;
-        uint256 approvedCount;
+        
+        address[] memory allProjects = new address[](count);
         for (uint256 i = 1; i <= count; i++) {
-            if (Proposal(payable(proposals[i])).isApproved()) approvedCount++;
+            allProjects[i-1] = proposals[i];
         }
-
-        address[] memory approvedProjects = new address[](approvedCount);
-        uint256 idx = 0;
-        for (uint256 i = 1; i <= count; i++) {
-            if (Proposal(payable(proposals[i])).isApproved()) {
-                approvedProjects[idx++] = proposals[i];
-            }
-        }
-        return approvedProjects;
+        return allProjects;
     }
 
     function isProposalApproved(uint256 proposalId) external view returns (bool) {
         address proposalAddr = proposals[proposalId];
         if (proposalAddr == address(0)) return false;
-        return Proposal(payable(proposalAddr)).isApproved();
+        return true; // All proposals are automatically approved for voting
     }
 
     function getProposal(uint256 proposalId) external view returns (address) {

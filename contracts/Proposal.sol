@@ -11,7 +11,6 @@ contract Proposal is AccessControl {
     address public treasury;
     uint256 public totalFunds;
     uint256 public fundsDisbursed;
-    bool public isApproved;
     
     bytes32 public constant DAO_ADMIN = keccak256("DAO_ADMIN");
 
@@ -30,10 +29,7 @@ contract Proposal is AccessControl {
         _;
     }
 
-    modifier onlyVerified() {
-        require(isApproved == true, "Proposal needs to be verified");
-        _;
-    }
+
 
     constructor(uint256 _proposalID, address _ngo, address _treasury, uint256 _totalFunds, string[] memory _milestoneDescriptions, uint256[] memory _milestoneAmounts, address admin, address proposalManager) {
         require(_milestoneDescriptions.length == _milestoneAmounts.length, "Mismatched milestones");
@@ -45,7 +41,6 @@ contract Proposal is AccessControl {
         treasury = _treasury;
         totalFunds = _totalFunds;
         fundsDisbursed = 0;
-        isApproved = false;
 
         for (uint i = 0; i < _milestoneDescriptions.length; i++) {
         milestones.push(Milestone({
@@ -57,11 +52,7 @@ contract Proposal is AccessControl {
         }
     } 
 
-    function approveProposal() external onlyRole(DAO_ADMIN) {
-        require(!isApproved, "Already approved");
-        //Include oracle verification here
-        isApproved = true;
-    }
+
 
     // function releaseFunds(uint _index) external onlyTreasury() onlyVerified() {
     //     Milestone storage m = milestones[_index];
@@ -85,7 +76,7 @@ contract Proposal is AccessControl {
         return (m.description, m.amount, m.completed, m.released);
     }
 
-    function verifyMilestone(uint index) external onlyVerified() { 
+    function verifyMilestone(uint index) external { 
         require(index < milestones.length, "Invalid milestone");
         require(!milestones[index].completed, "Already verified");
        
@@ -102,6 +93,10 @@ contract Proposal is AccessControl {
 
     function getMilestoneCount() external view returns (uint256) {
         return milestones.length;
+    }
+
+    function isApproved() external pure returns (bool) {
+        return true; // All proposals are automatically approved for voting
     }
 
     function markMilestoneCompleted(uint256 index) external onlyRole(DAO_ADMIN) {

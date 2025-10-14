@@ -282,7 +282,7 @@ describe("CharityDAO Contracts", function () {
       expect(await proposal.treasury()).to.equal(treasury.target);
       expect(await proposal.totalFunds()).to.equal(totalFunds);
       expect(await proposal.fundsDisbursed()).to.equal(0);
-      expect(await proposal.isApproved()).to.equal(false);
+      expect(await proposal.isApproved()).to.equal(true); // All proposals are automatically approved
       expect(await proposal.milestoneCount()).to.equal(2);
 
       const milestone0 = await proposal.getMilestone(0);
@@ -290,12 +290,6 @@ describe("CharityDAO Contracts", function () {
       expect(milestone0.amount).to.equal(milestonesAmt[0]);
       expect(milestone0.completed).to.equal(false);
       expect(milestone0.released).to.equal(false);
-    });
-    it("Should allow ProposalManager to approve the proposal", async function () {
-      expect(await proposal.isApproved()).to.equal(false);
-      const proposalId = 1;
-      await proposalManager.connect(admin).approveProposal(proposalId);
-      expect(await proposal.isApproved()).to.equal(true);
     });
   });
 
@@ -311,7 +305,7 @@ describe("CharityDAO Contracts", function () {
     let proposalId = 1;
 
     beforeEach(async function () {
-      // Create and approve a proposal
+      // Create a proposal (no approval needed - all proposals are votable immediately)
       const tx = await proposalManager
         .connect(ngo)
         .createProposal(totalFunds, milestonesDesc, milestonesAmt);
@@ -330,9 +324,6 @@ describe("CharityDAO Contracts", function () {
       if (!event) throw new Error("ProposalCreated event not found");
       proposalAddress = event.args.proposalAddress;
       proposal = Proposal.attach(proposalAddress);
-
-      // Approve the proposal
-      await proposalManager.connect(admin).approveProposal(proposalId);
 
       // Give donors some tokens by making donations
       await treasury
@@ -442,17 +433,13 @@ describe("CharityDAO Contracts", function () {
         expect(userCredits).to.equal(expectedCredits);
       });
 
-      it("Should revert voting on unapproved proposals", async function () {
-        // Create another proposal but don't approve it
-        const tx = await proposalManager
-          .connect(ngo)
-          .createProposal(totalFunds, milestonesDesc, milestonesAmt);
-        await tx.wait();
-        const unapprovedProposalId = 2;
+      it("Should revert voting on non-existent proposals", async function () {
+        // Try to vote on a proposal ID that doesn't exist
+        const nonExistentProposalId = 999;
 
         await expect(
-          votingManager.connect(donor1).vote(unapprovedProposalId, 5)
-        ).to.be.revertedWith("Proposal not approved");
+          votingManager.connect(donor1).vote(nonExistentProposalId, 5)
+        ).to.be.revertedWith("Proposal does not exist");
       });
 
       it("Should revert if insufficient credits", async function () {
@@ -530,9 +517,6 @@ describe("CharityDAO Contracts", function () {
           );
         await tx.wait();
 
-        // Approve the test proposal
-        await proposalManager.connect(admin).approveProposal(testProposalId);
-
         // Get the test proposal address
         const testProposalAddr = await proposalManager.getProposal(
           testProposalId
@@ -598,7 +582,6 @@ describe("CharityDAO Contracts", function () {
             testMilestonesAmt
           );
         await tx.wait();
-        await proposalManager.connect(admin).approveProposal(testProposalId);
 
         // Grant VotingManager DAO_ADMIN role on the proposal
         const testProposalAddr = await proposalManager.getProposal(
@@ -646,7 +629,6 @@ describe("CharityDAO Contracts", function () {
             testMilestonesAmt
           );
         await tx.wait();
-        await proposalManager.connect(admin).approveProposal(testProposalId);
 
         // Grant VotingManager DAO_ADMIN role on the proposal
         const testProposalAddr = await proposalManager.getProposal(
@@ -686,7 +668,6 @@ describe("CharityDAO Contracts", function () {
             testMilestonesAmt
           );
         await tx.wait();
-        await proposalManager.connect(admin).approveProposal(testProposalId);
 
         // Grant VotingManager DAO_ADMIN role on the proposal
         const testProposalAddr = await proposalManager.getProposal(
@@ -739,7 +720,7 @@ describe("CharityDAO Contracts", function () {
       it("Should revert for non-existent proposals", async function () {
         await expect(
           votingManager.connect(donor1).vote(999, 5)
-        ).to.be.revertedWith("Proposal not approved");
+        ).to.be.revertedWith("Proposal does not exist");
       });
 
       it("Should handle proposals with no milestones gracefully", async function () {
@@ -770,7 +751,6 @@ describe("CharityDAO Contracts", function () {
             testMilestonesAmt
           );
         await tx.wait();
-        await proposalManager.connect(admin).approveProposal(testProposalId);
 
         // Grant VotingManager DAO_ADMIN role on the proposal
         const testProposalAddr = await proposalManager.getProposal(
