@@ -74,13 +74,14 @@ contract Proposal is AccessControl {
     //     payable(ngo).transfer(m.amount);
     // }
 
-    function getMilestone(uint _index) external view returns (
+    function getMilestone(uint256 index) external view returns (
         string memory description,
         uint256 amount,
         bool completed,
         bool released
     ) {
-        Milestone storage m = milestones[_index];
+        require(index < milestones.length, "Invalid milestone index");
+        Milestone storage m = milestones[index];
         return (m.description, m.amount, m.completed, m.released);
     }
 
@@ -93,6 +94,20 @@ contract Proposal is AccessControl {
 
     function milestoneCount() external view returns (uint) {
         return milestones.length;
+    }
+
+    function getNgoAddress() external view returns (address) {
+        return ngo;
+    }
+
+    function getMilestoneCount() external view returns (uint256) {
+        return milestones.length;
+    }
+
+    function markMilestoneCompleted(uint256 index) external onlyRole(DAO_ADMIN) {
+        require(index < milestones.length, "Invalid milestone index");
+        require(!milestones[index].completed, "Milestone already completed");
+        milestones[index].completed = true;
     }
 
     receive() external payable {}

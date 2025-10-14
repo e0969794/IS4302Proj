@@ -90,4 +90,14 @@ contract ProposalManager is AccessControl {
         }
         return approvedProjects;
     }
+
+    function isProposalApproved(uint256 proposalId) external view returns (bool) {
+        address proposalAddr = proposals[proposalId];
+        if (proposalAddr == address(0)) return false;
+        return Proposal(payable(proposalAddr)).isApproved();
+    }
+
+    function getProposal(uint256 proposalId) external view returns (address) {
+        return proposals[proposalId];
+    }
 }
