@@ -9,7 +9,7 @@ import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
 
 contract GovernanceToken is ERC20, ERC20Permit, ERC20Votes, AccessControl, Pausable {
-    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+    bytes32 public constant TREASURY_ROLE = keccak256("TREASURY_ROLE");
 
     constructor(address admin)
         ERC20("CharityDAO Governance", "GOV")
@@ -25,11 +25,15 @@ contract GovernanceToken is ERC20, ERC20Permit, ERC20Votes, AccessControl, Pausa
 
     function mintOnDonation(address to, uint256 amount, bytes32 donationId)
         external
-        onlyRole(MINTER_ROLE)
+        onlyRole(TREASURY_ROLE)
     {
         require(to != address(0) && amount > 0, "bad params");
         _mint(to, amount);
         emit MintedOnDonation(to, amount, donationId);
+    }
+
+ function burn(address from, uint256 amount) external onlyRole(TREASURY_ROLE) {
+        _burn(from, amount);
     }
 
     // Override nonces to resolve conflict between ERC20Permit and Nonces

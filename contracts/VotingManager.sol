@@ -1,0 +1,103 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+
+interface IGovToken {
+    function balanceOf(address account) external view returns (uint256);
+}
+
+interface IProposalManager {
+    struct Milestone {
+        string description;
+        uint256 amount;
+    }
+    struct Proposal {
+        uint256 id; //0 means not active (expired/completed)
+        address ngo;
+        Milestone[] milestones;
+    }
+    function getProposal(uint256 proposalId) external view returns (Proposal memory);
+}
+
+interface ITreasury {
+    function disburseMilestoneFunds(address payable ngo, uint256 amountWei) external;
+
+    function getTokenBalance(address from) external view returns (uint256);
+
+    function burnETH(address user, uint256 amount) external;
+}
+
+contract VotingManager is AccessControl, ReentrancyGuard {
+    IProposalManager public immutable proposalManager;
+    ITreasury public immutable treasury;
+
+    mapping(uint256 => uint256) public proposalVotesMapping; //maps proposalId to the number of votes it has
+    mapping(uint256 => uint) public nextMilestoneMapping; //maps proposalId to its next milestone
+
+    event VoteCast(address indexed voter, uint256 indexed proposalId, uint256 votes, uint256 creditsSpent);
+    event MilestoneUnlocked(uint256 indexed proposalId, uint256 milestoneIndex, uint256 amountReleased, uint256 timelockId);
+
+    constructor(
+        address admin,
+        address _proposalManager,
+        address _treasury
+    ) {
+        _grantRole(DEFAULT_ADMIN_ROLE, admin);
+
+        proposalManager = IProposalManager(_proposalManager);
+        treasury = ITreasury(_treasury);
+    }
+
+    function getProposalVotes(uint256 proposalId) external view returns (uint256) {
+        return proposalVotesMapping[proposalId];
+    }
+
+    //called by anyone or called by vote function
+    function _processProposal(uint256 proposalId) internal {
+        uint256 currVotes = proposalVotesMapping[proposalId];
+        IProposalManager.Proposal memory p = proposalManager.getProposal(proposalId);
+        uint nextMilestone = nextMilestoneMapping[proposalId];
+        if (currVotes >= p.milestones[nextMilestone].amount) {
+            nextMilestoneMapping[proposalId]++;
+
+        }
+        
+    }
+
+    function getNextMilestone(uint256 proposalId, uint256 currVotes) external view returns (uint) {
+        IProposalManager.Proposal memory p = proposalManager.getProposal(proposalId);
+
+        uint currIndex = 0;
+        while (currIndex < p.milestones.length) {
+            if (currVotes > p.milestones[currIndex].amount) {
+                currIndex++;
+            } else {
+                return currIndex;
+            }
+        }
+        return currIndex;
+    }
+
+    function vote(uint256 proposalId, uint256 votes) external nonReentrant {
+        //1. burn tokens
+        //2. add into proposal's votes
+        //3. processProposal
+        require(votes > 0, "Must cast at least 1 vote");
+
+        uint256 tokensRequired = votes * votes;
+
+        require(treasury.getTokenBalance(msg.sender) >= tokensRequired, "Insufficient credits");
+
+        treasury.burnETH(msg.sender, tokensRequired);
+
+        //dont need to check if it doesnt exist because by default it is 0
+        proposalVotesMapping[proposalId] += votes;
+    }
+
+    function _disburseMilestoneFunds(address payable ngo, uint256 amountWei) internal {
+        treasury.disburseMilestoneFunds(ngo, amountWei);
+    }
+
+}
