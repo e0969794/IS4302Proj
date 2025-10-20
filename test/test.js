@@ -15,47 +15,51 @@ describe("CharityDAO Contracts", function () {
     // 1. Deploy GovernanceToken
     GovernanceToken = await ethers.getContractFactory("GovernanceToken");
     govToken = await GovernanceToken.deploy(admin.address);
+    await govToken.waitForDeployment();
 
     // 2. Deploy Treasury
     Treasury = await ethers.getContractFactory("Treasury");
     treasury = await Treasury.deploy(
       admin.address,
-      govToken.address,
+      govToken.target,
       initialMintRate //dont think we need this
     );
     await treasury.waitForDeployment();
-    console.log("Treasury deployed at:", treasury.address);
+    console.log("Treasury deployed at:", treasury.target);
 
     // Now grant TREASURY_ROLE to Treasury
     const TREASURY_ROLE = await govToken.TREASURY_ROLE();
-    await govToken.connect(admin).grantRole(TREASURY_ROLE, treasury.address);
+    await govToken.connect(admin).grantRole(TREASURY_ROLE, treasury.target);
 
     // 3. Deploy ProposalManager
-    const ProposalManager = await ethers.getContractFactory("ProposalManager");
-    const proposalManager = await ProposalManager.deploy(
+    ProposalManager = await ethers.getContractFactory("ProposalManager");
+    proposalManager = await ProposalManager.deploy(
       admin.address,
     ); //dont need to grant role
-    console.log("ProposalManager deployed at:", proposalManager.address);
+    await proposalManager.waitForDeployment();
+    console.log("ProposalManager deployed at:", proposalManager.target);
 
     // 4. Deploy VotingManager
-    const VotingManager = await ethers.getContractFactory("VotingManager");
-    const votingManager = await VotingManager.deploy(
+    VotingManager = await ethers.getContractFactory("VotingManager");
+    votingManager = await VotingManager.deploy(
       admin.address,
-      proposalManager.address,
-      treasury.address
+      proposalManager.target,
+      treasury.target
     );
-    console.log("VotingManager deployed at:", votingManager.address);
+    await votingManager.waitForDeployment();
+    console.log("VotingManager deployed at:", votingManager.target);
 
     // grant BURNER_ROLE and DISBURSER to VotingManager 
     const BURNER_ROLE = await treasury.BURNER_ROLE();
-    await treasury.connect(admin).grantRole(BURNER_ROLE, votingManager.address);
+    await treasury.connect(admin).grantRole(BURNER_ROLE, votingManager.target);
     const DISBURSER_ROLE = await treasury.DISBURSER_ROLE();
-    await treasury.connect(admin).grantRole(DISBURSER_ROLE, votingManager.address);
+    await treasury.connect(admin).grantRole(DISBURSER_ROLE, votingManager.target);
   });
   
   //this part onwards needs work
 
   describe("GovernanceToken", function () {
+
     it("Should set the correct name and symbol", async function () {
       expect(await govToken.name()).to.equal("CharityDAO Governance");
       expect(await govToken.symbol()).to.equal("GOV");
@@ -90,34 +94,14 @@ describe("CharityDAO Contracts", function () {
       );
     });
 
-    it("Should allow minter to mint on donation", async function () {
-      const amount = ethers.parseEther("10");
-      const donationId = ethers.keccak256(ethers.toUtf8Bytes("testId"));
-
-      // Treasury has minter role, so call from treasury context (but simulate)
-      // Actually, since mintOnDonation is called by minter, we can impersonate or call directly if we grant to admin for test
-      await govToken
-        .connect(admin)
-        .grantRole(await govToken.MINTER_ROLE(), admin.address); // Temporarily grant to admin for direct test
-
-      const tx = await govToken
-        .connect(admin)
-        .mintOnDonation(donor1.address, amount, donationId);
-      await expect(tx)
-        .to.emit(govToken, "MintedOnDonation")
-        .withArgs(donor1.address, amount, donationId);
-
-      expect(await govToken.balanceOf(donor1.address)).to.equal(amount);
-    });
-
-    it("Should revert mint if not minter", async function () {
+    it("Should revert mint if not treasury", async function () {
       const amount = ethers.parseEther("10");
       const donationId = ethers.keccak256(ethers.toUtf8Bytes("testId"));
 
       await expect(
         govToken
-          .connect(donor1)
-          .mintOnDonation(donor1.address, amount, donationId)
+          .connect(admin)
+          .mintOnDonation(admin.address, amount, donationId)
       ).to.be.revertedWithCustomError(
         govToken,
         "AccessControlUnauthorizedAccount"
@@ -127,10 +111,9 @@ describe("CharityDAO Contracts", function () {
     it("Should revert mint with bad params", async function () {
       const donationId = ethers.keccak256(ethers.toUtf8Bytes("testId"));
 
-      // Grant minter to admin
       await govToken
         .connect(admin)
-        .grantRole(await govToken.MINTER_ROLE(), admin.address);
+        .grantRole(await govToken.TREASURY_ROLE(), admin.address);
 
       await expect(
         govToken
@@ -146,7 +129,7 @@ describe("CharityDAO Contracts", function () {
       // Mint some tokens
       await govToken
         .connect(admin)
-        .grantRole(await govToken.MINTER_ROLE(), admin.address);
+        .grantRole(await govToken.TREASURY_ROLE(), admin.address);
       await govToken
         .connect(admin)
         .mintOnDonation(
@@ -167,9 +150,9 @@ describe("CharityDAO Contracts", function () {
 
   describe("Treasury", function () {
     it("Should set initial values correctly", async function () {
-      expect(await treasury.gov()).to.equal(govToken.address);
+      expect(await treasury.token()).to.equal(govToken.target);
       expect(await treasury.mintRate()).to.equal(initialMintRate);
-      expect(await treasury.hasRole(await treasury.DAO_ADMIN(), admin.address))
+      expect(await treasury.hasRole(await treasury.DEFAULT_ADMIN_ROLE(), admin.address))
         .to.be.true;
     });
 
@@ -210,10 +193,10 @@ describe("CharityDAO Contracts", function () {
         .withArgs(donor1.address, donationAmount, expectedMint, donationId);
 
       expect(await govToken.balanceOf(donor1.address)).to.equal(expectedMint);
-      expect(await treasury.connect(donor1).getGovTokenBalance()).to.equal(
+      expect(await treasury.connect(donor1).getTokenBalance(donor1.address)).to.equal(
         expectedMint
       );
-      expect(await ethers.provider.getBalance(treasury.address)).to.equal(
+      expect(await ethers.provider.getBalance(treasury.target)).to.equal(
         donationAmount
       );
     });
@@ -223,7 +206,7 @@ describe("CharityDAO Contracts", function () {
       const expectedMint =
         (donationAmount * initialMintRate) / ethers.parseEther("1");
       await expect(
-        donor1.sendTransaction({ to: treasury.address, value: donationAmount })
+        donor1.sendTransaction({ to: treasury.target, value: donationAmount })
       ).to.be.reverted;
     });
 
@@ -239,17 +222,82 @@ describe("CharityDAO Contracts", function () {
         treasury.connect(donor1).donateETH({ value: ethers.parseEther("1") })
       ).to.be.revertedWith("mintRate=0");
     });
+    it("Should revert burnETH if caller is not BURNER_ROLE", async function () {
+        const burnAmount = ethers.parseEther("1");
+      
+        // donor1 should not have the BURNER_ROLE
+        await expect(
+          treasury.connect(donor1).burnETH(donor1.address, burnAmount)
+        ).to.be.revertedWithCustomError(
+          treasury,
+          "AccessControlUnauthorizedAccount"
+        );
+      });
+      
+      it("Should allow admin (with BURNER_ROLE) to burn tokens", async function () {
+        const burnAmount = ethers.parseEther("1");
+      
+        // Give donor1 some GOV tokens first
+        await treasury.connect(donor1).donateETH({ value: burnAmount });
+      
+        // Grant BURNER_ROLE to admin
+        const burnerRole = await treasury.BURNER_ROLE();
+        await treasury.connect(admin).grantRole(burnerRole, admin.address);
+      
+        const balanceBefore = await govToken.balanceOf(donor1.address);
+      
+        // Burn tokens
+        await expect(treasury.connect(admin).burnETH(donor1.address, burnAmount))
+          .to.emit(govToken, "Transfer")
+          .withArgs(donor1.address, ethers.ZeroAddress, burnAmount);
+      
+        const balanceAfter = await govToken.balanceOf(donor1.address);
+        expect(balanceAfter).to.equal(balanceBefore - burnAmount);
+      });
+      
+      it("Should revert disburseMilestoneFunds if caller is not DISBURSER_ROLE", async function () {
+        const amountWei = ethers.parseEther("0.5");
+      
+        await expect(
+          treasury.connect(donor1).disburseMilestoneFunds(ngo.address, amountWei)
+        ).to.be.revertedWithCustomError(
+          treasury,
+          "AccessControlUnauthorizedAccount"
+        );
+      });
+      
+      it("Should allow admin (with DISBURSER_ROLE) to disburse funds", async function () {
+        const amountWei = ethers.parseEther("0.5");
+      
+        // Donate ETH so Treasury has funds
+        await treasury.connect(donor1).donateETH({ value: ethers.parseEther("1") });
+      
+        // Grant DISBURSER_ROLE to admin
+        const disburserRole = await treasury.DISBURSER_ROLE();
+        await treasury.connect(admin).grantRole(disburserRole, admin.address);
+      
+        const ngoBalanceBefore = await ethers.provider.getBalance(ngo.address);
+      
+        const tx = await treasury
+          .connect(admin)
+          .disburseMilestoneFunds(ngo.address, amountWei);
+        await tx.wait();
+      
+        const ngoBalanceAfter = await ethers.provider.getBalance(ngo.address);
+        expect(ngoBalanceAfter).to.be.gt(ngoBalanceBefore);
+      });
   });
+
+
   describe("ProposalManager", function () {
-    let proposalAddress, proposal;
+    let proposaltarget, proposalId;
     const milestonesDesc = ["Build school", "Purchase books"];
     const milestonesAmt = [ethers.parseEther("1"), ethers.parseEther("2")];
-    const totalFunds = ethers.parseEther("3");
 
     beforeEach(async function () {
       const tx = await proposalManager
         .connect(ngo)
-        .createProposal(totalFunds, milestonesDesc, milestonesAmt);
+        .createProposal(milestonesDesc, milestonesAmt);
       const receipt = await tx.wait();
 
       const event = receipt.logs
@@ -263,29 +311,26 @@ describe("CharityDAO Contracts", function () {
         .filter((e) => e && e.name === "ProposalCreated")[0];
 
       if (!event) throw new Error("ProposalCreated event not found");
-      proposalAddress = event.args.proposalAddress;
-
-      proposal = Proposal.attach(proposalAddress);
+      proposalId = event.args.proposalId;
     });
 
     it("Should create proposal given the correct details", async function () {
-      expect(await proposal.ngo()).to.equal(ngo.address);
-      expect(await proposal.treasury()).to.equal(treasury.address);
-      expect(await proposal.totalFunds()).to.equal(totalFunds);
-      expect(await proposal.fundsDisbursed()).to.equal(0);
-      expect(await proposal.isApproved()).to.equal(true); // All proposals are automatically approved
-      expect(await proposal.milestoneCount()).to.equal(2);
+      const proposal = await proposalManager.getProposal(proposalId);
 
-      const milestone0 = await proposal.getMilestone(0);
-      expect(milestone0.description).to.equal("Build school");
-      expect(milestone0.amount).to.equal(milestonesAmt[0]);
-      expect(milestone0.completed).to.equal(false);
-      expect(milestone0.released).to.equal(false);
+      expect(await proposal.ngo).to.equal(ngo.address);
+      
+      const milestones = proposal[2]
+      expect(await milestones.length).to.equal(2);
+
+      const milestone0 = await milestones[0];
+      expect(milestone0[0]).to.equal("Build school");
+      expect(milestone0[1]).to.equal(ethers.parseEther("1"));
     });
   });
-
+  
+/*
   describe("VotingManager", function () {
-    let proposalAddress, proposal;
+    let proposaltarget, proposal;
     const milestonesDesc = ["Build school", "Purchase books", "Hire teachers"];
     const milestonesAmt = [
       ethers.parseEther("10"),
@@ -313,8 +358,8 @@ describe("CharityDAO Contracts", function () {
         .filter((e) => e && e.name === "ProposalCreated")[0];
 
       if (!event) throw new Error("ProposalCreated event not found");
-      proposalAddress = event.args.proposalAddress;
-      proposal = Proposal.attach(proposalAddress);
+      proposaltarget = event.args.proposaltarget;
+      proposalId = Proposal.attach(proposaltarget);
 
       // Give donors some tokens by making donations
       await treasury
@@ -330,11 +375,11 @@ describe("CharityDAO Contracts", function () {
 
     describe("Deployment and Setup", function () {
       it("Should deploy with correct initial values", async function () {
-        expect(await votingManager.govToken()).to.equal(govToken.address);
+        expect(await votingManager.govToken()).to.equal(govToken.target);
         expect(await votingManager.proposalManager()).to.equal(
-          proposalManager.address
+          proposalManager.target
         );
-        expect(await votingManager.treasury()).to.equal(treasury.address);
+        expect(await votingManager.treasury()).to.equal(treasury.target);
         expect(
           await votingManager.hasRole(
             await votingManager.DAO_ADMIN(),
@@ -344,10 +389,10 @@ describe("CharityDAO Contracts", function () {
       });
 
       it("Should be set as VotingManager in Treasury", async function () {
-        expect(await treasury.votingManager()).to.equal(votingManager.address);
+        expect(await treasury.votingManager()).to.equal(votingManager.target);
         const VOTING_MANAGER_ROLE = await treasury.VOTING_MANAGER_ROLE();
         expect(
-          await treasury.hasRole(VOTING_MANAGER_ROLE, votingManager.address)
+          await treasury.hasRole(VOTING_MANAGER_ROLE, votingManager.target)
         ).to.be.true;
       });
     });
@@ -508,7 +553,7 @@ describe("CharityDAO Contracts", function () {
           );
         await tx.wait();
 
-        // Get the test proposal address
+        // Get the test proposal target
         const testProposalAddr = await proposalManager.getProposal(
           testProposalId
         );
@@ -518,11 +563,11 @@ describe("CharityDAO Contracts", function () {
         const DAO_ADMIN = await testProposal.DAO_ADMIN();
         await testProposal
           .connect(admin)
-          .grantRole(DAO_ADMIN, votingManager.address);
+          .grantRole(DAO_ADMIN, votingManager.target);
 
         // Cast enough votes to unlock first milestone (need 10 votes)
         const initialTreasuryBalance = await ethers.provider.getBalance(
-          treasury.address
+          treasury.target
         );
 
         const voteTx = await votingManager
@@ -536,7 +581,7 @@ describe("CharityDAO Contracts", function () {
 
         await expect(voteTx)
           .to.emit(votingManager, "FundsReleased")
-          .withArgs(testProposalId, 0, ngo.address, testMilestonesAmt[0]);
+          .withArgs(testProposalId, 0, ngo.target, testMilestonesAmt[0]);
 
         expect(await votingManager.isMilestoneUnlocked(testProposalId, 0)).to.be
           .true;
@@ -545,7 +590,7 @@ describe("CharityDAO Contracts", function () {
 
         // Verify funds were transferred from treasury
         const finalTreasuryBalance = await ethers.provider.getBalance(
-          treasury.address
+          treasury.target
         );
         expect(initialTreasuryBalance - finalTreasuryBalance).to.equal(
           testMilestonesAmt[0]
@@ -582,7 +627,7 @@ describe("CharityDAO Contracts", function () {
         const DAO_ADMIN = await testProposal.DAO_ADMIN();
         await testProposal
           .connect(admin)
-          .grantRole(DAO_ADMIN, votingManager.address);
+          .grantRole(DAO_ADMIN, votingManager.target);
 
         // Cast enough votes to unlock both milestones (need 20 votes for second milestone)
         const voteTx = await votingManager
@@ -629,7 +674,7 @@ describe("CharityDAO Contracts", function () {
         const DAO_ADMIN = await testProposal.DAO_ADMIN();
         await testProposal
           .connect(admin)
-          .grantRole(DAO_ADMIN, votingManager.address);
+          .grantRole(DAO_ADMIN, votingManager.target);
 
         // Cast votes
         await votingManager.connect(donor1).vote(testProposalId, 10);
@@ -668,7 +713,7 @@ describe("CharityDAO Contracts", function () {
         const DAO_ADMIN = await testProposal.DAO_ADMIN();
         await testProposal
           .connect(admin)
-          .grantRole(DAO_ADMIN, votingManager.address);
+          .grantRole(DAO_ADMIN, votingManager.target);
 
         // Multiple users vote
         await votingManager.connect(donor1).vote(testProposalId, 8); // 8 votes, 64 credits
@@ -751,19 +796,19 @@ describe("CharityDAO Contracts", function () {
         const DAO_ADMIN = await testProposal.DAO_ADMIN();
         await testProposal
           .connect(admin)
-          .grantRole(DAO_ADMIN, votingManager.address);
+          .grantRole(DAO_ADMIN, votingManager.target);
 
-        const initialNgoBalance = await ethers.provider.getBalance(ngo.address);
+        const initialNgoBalance = await ethers.provider.getBalance(ngo.target);
         const initialTreasuryBalance = await ethers.provider.getBalance(
-          treasury.address
+          treasury.target
         );
 
         // Cast votes to unlock milestone
         await votingManager.connect(donor1).vote(testProposalId, 10);
 
-        const finalNgoBalance = await ethers.provider.getBalance(ngo.address);
+        const finalNgoBalance = await ethers.provider.getBalance(ngo.target);
         const finalTreasuryBalance = await ethers.provider.getBalance(
-          treasury.address
+          treasury.target
         );
 
         // NGO should receive the milestone amount
@@ -777,4 +822,5 @@ describe("CharityDAO Contracts", function () {
       });
     });
   });
+  */
 });

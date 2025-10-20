@@ -25,6 +25,7 @@ contract ProposalManager {
     event MilestoneVerified(uint256 indexed proposalId, uint256 milestoneIndex);
     event MilestoneCompleted(uint256 indexed proposalId, uint256 milestoneIndex);
 
+    //dont need to grant role because there isnt any permissions involved for this contract's operations
     constructor(address _admin) {
         require(_admin != address(0), "Invalid admin address");
         admin = _admin;
