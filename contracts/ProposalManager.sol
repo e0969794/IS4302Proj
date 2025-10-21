@@ -10,6 +10,7 @@ interface ITreasury {
 contract ProposalManager is AccessControl {
     ITreasury public immutable treasury;
     bytes32 public constant PROPOSAL_MANAGER_ADMIN = keccak256("PROPOSAL_MANAGER_ADMIN");
+    bytes32 public constant PROOF_ORACLE = keccak256("PROOF_ORACLE");
     address public admin;
     uint256 public nextProposalId;
 
@@ -18,6 +19,7 @@ contract ProposalManager is AccessControl {
         uint256 amount;
         bool completed;
         bool released;
+        bytes32 proofHash;
     }
 
     struct Proposal {
@@ -68,7 +70,8 @@ contract ProposalManager is AccessControl {
                     description: milestoneDescriptions[i],
                     amount: milestoneAmounts[i],
                     completed: false,
-                    released: false
+                    released: false,
+                    proofHash: bytes32(0)
                 })
             );
         }
@@ -88,17 +91,21 @@ contract ProposalManager is AccessControl {
         return (m.description, m.amount, m.completed, m.released);
     }
 
-    function verifyMilestone(uint256 proposalId, uint256 index)
+    function _verifyMilestone(uint256 proposalId, uint256 index, bytes32 proofHash) 
         external
-        onlyRole(PROPOSAL_MANAGER_ADMIN)
-    {
-        Proposal storage p = proposals[proposalId];
-        require(index < p.milestones.length, "Invalid milestone index");
-        require(!p.milestones[index].completed, "Already verified");
+        onlyRole(PROOF_ORACLE) {
+            Proposal storage p = proposals[proposalId]; 
+            require(index < p.milestones.length, "Invalid milestone index");
 
-        p.milestones[index].completed = true;
-        emit MilestoneVerified(proposalId, index);
-    }
+            Milestone storage m = p.milestones[index]; 
+            require(!m.completed, "Already verified");
+            require(m.proofHash == bytes32(0), "Already contains a proof");
+
+            m.proofHash = proofHash;
+            m.completed = true;
+
+            emit MilestoneVerified(proposalId, index);
+        }
 
     function getAllProjects() external view returns (Proposal[] memory) {
         Proposal[] memory all = new Proposal[](nextProposalId - 1);
