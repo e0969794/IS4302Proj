@@ -61,10 +61,11 @@ contract Treasury is AccessControl, ReentrancyGuard {
         token.burn(user, amount) ;
     }
 
-    function disburseMilestoneFunds(address payable ngo, uint256 amountWei) external onlyRole(DISBURSER_ROLE) {
-        require(address(this).balance >= amountWei, "Insufficient contract balance");
+    function disburseMilestoneFunds(address payable ngo, uint256 tokenAmount) external onlyRole(DISBURSER_ROLE) {
+        uint256 weiAmount = tokenAmount * mintRate;
+        require(address(this).balance  >= weiAmount, "Insufficient contract balance");
 
-        (bool success, ) = ngo.call{value: amountWei}("");
+        (bool success, ) = ngo.call{value: weiAmount}("");
         require(success, "Ether transfer failed");
     }
 

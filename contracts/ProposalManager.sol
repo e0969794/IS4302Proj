@@ -4,7 +4,6 @@ pragma solidity ^0.8.24;
 
 contract ProposalManager {
     uint256 public nextProposalId;
-    address public admin;
 
     struct Milestone {
         string description;
@@ -25,10 +24,8 @@ contract ProposalManager {
     event MilestoneVerified(uint256 indexed proposalId, uint256 milestoneIndex);
     event MilestoneCompleted(uint256 indexed proposalId, uint256 milestoneIndex);
 
-    //dont need to grant role because there isnt any permissions involved for this contract's operations
-    constructor(address _admin) {
-        require(_admin != address(0), "Invalid admin address");
-        admin = _admin;
+    //dont need to grant role because there isnt any permissions involved for this contract's operations. i dont think we need to grant admin
+    constructor() {
         nextProposalId = 1;
     }
 

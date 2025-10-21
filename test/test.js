@@ -33,9 +33,7 @@ describe("CharityDAO Contracts", function () {
 
     // 3. Deploy ProposalManager
     ProposalManager = await ethers.getContractFactory("ProposalManager");
-    proposalManager = await ProposalManager.deploy(
-      admin.address,
-    ); //dont need to grant role
+    proposalManager = await ProposalManager.deploy(); //dont need to grant role
     await proposalManager.waitForDeployment();
     console.log("ProposalManager deployed at:", proposalManager.target);
 
@@ -267,10 +265,10 @@ describe("CharityDAO Contracts", function () {
       });
       
       it("Should allow admin (with DISBURSER_ROLE) to disburse funds", async function () {
-        const amountWei = ethers.parseEther("0.5");
+        const tokenAmount = 1;
       
         // Donate ETH so Treasury has funds
-        await treasury.connect(donor1).donateETH({ value: ethers.parseEther("1") });
+        await treasury.connect(donor1).donateETH({ value: ethers.parseEther("2") });
       
         // Grant DISBURSER_ROLE to admin
         const disburserRole = await treasury.DISBURSER_ROLE();
@@ -280,7 +278,7 @@ describe("CharityDAO Contracts", function () {
       
         const tx = await treasury
           .connect(admin)
-          .disburseMilestoneFunds(ngo.address, amountWei);
+          .disburseMilestoneFunds(ngo.address, tokenAmount);
         await tx.wait();
       
         const ngoBalanceAfter = await ethers.provider.getBalance(ngo.address);

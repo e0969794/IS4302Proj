@@ -59,9 +59,16 @@ contract VotingManager is AccessControl, ReentrancyGuard {
         uint256 currVotes = proposalVotesMapping[proposalId];
         IProposalManager.Proposal memory p = proposalManager.getProposal(proposalId);
         uint nextMilestone = nextMilestoneMapping[proposalId];
-        if (currVotes >= p.milestones[nextMilestone].amount) {
+        if (currVotes >= p.milestones[nextMilestone].amount) { //strict assumption that there milestones are hit one at a time 
+            //calculate tokens needed (curr amount - prev amount)
+            uint256 tokenAmount;
+            if (nextMilestone > 0) {
+                tokenAmount = p.milestones[nextMilestone].amount - p.milestones[nextMilestone-1].amount;
+            } else {
+                tokenAmount = p.milestones[nextMilestone].amount;
+            }
+            _disburseMilestoneFunds(payable (p.ngo), tokenAmount);
             nextMilestoneMapping[proposalId]++;
-
         }
         
     }
@@ -94,10 +101,12 @@ contract VotingManager is AccessControl, ReentrancyGuard {
 
         //dont need to check if it doesnt exist because by default it is 0
         proposalVotesMapping[proposalId] += votes;
+
+
     }
 
-    function _disburseMilestoneFunds(address payable ngo, uint256 amountWei) internal {
-        treasury.disburseMilestoneFunds(ngo, amountWei);
+    function _disburseMilestoneFunds(address payable ngo, uint256 tokenAmount) internal {
+        treasury.disburseMilestoneFunds(ngo, tokenAmount);
     }
 
 }
