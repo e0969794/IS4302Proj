@@ -59,7 +59,7 @@ contract Treasury is AccessControl, ReentrancyGuard {
 
     function burnETH(address user, uint256 amount) external nonReentrant onlyRole(BURNER_ROLE) {
         token.burn(user, amount) ;
-    }
+
 
     function disburseMilestoneFunds(address payable ngo, uint256 tokenAmount) external onlyRole(DISBURSER_ROLE) {
         uint256 weiAmount = tokenAmount * mintRate;

@@ -286,9 +286,87 @@ describe("CharityDAO Contracts", function () {
       });
   });
 
+   describe("NGOOracleMock", function () {
+    let ngoOracle;
+    let deployer, verifiedNGO, unverifiedNGO;
+    let numNGOs = 3; // Number of NGO wallets to generate
+    let ngoDetails = [
+            "Red Cross International - Humanitarian aid and disaster relief",
+            "Save the Children - Education and health programs for children",
+            "World Wildlife Fund - Environmental conservation and research"
+        ];
+    let ngoWallets = [];
+    for (let i = 0; i < numNGOs; i++) {
+        const wallet = ethers.Wallet.createRandom();
+        ngoWallets.push({
+            address: wallet.address,
+            privateKey: wallet.privateKey
+        });
+    }
+
+    beforeEach(async function () {
+        [deployer, verifiedNGO, unverifiedNGO] = await ethers.getSigners();
+
+        // Deploy the oracle contract
+        const ngoAddresses = ngoWallets.map(wallet => wallet.address);
+        const NGOOracle = await ethers.getContractFactory("NGOOracle");
+        ngoOracle = await NGOOracle.deploy(ngoAddresses, ngoDetails.slice(0, numNGOs));
+        await ngoOracle.waitForDeployment();
+    });
+
+    it("should pre-approve 3 NGOs at deployment", async function () {
+        ngoWallets.forEach(async (wallet, index) => {
+            // Check they are approved
+            expect(await ngoOracle.approvedNGOs(wallet.address)).to.equal(true);
+            // Check their details exist
+            const details = await ngoOracle.ngoDetails(wallet.address);
+            expect(details).to.contain(ngoDetails[index]);
+        });
+    });
+
+    it("should return true and emit NGOVerified for verified NGO", async function () {
+        const verifiedAddress = ngoWallets[0].address;
+
+        // Call verifyNGO
+        const tx = await ngoOracle.verifyNGO(verifiedAddress);
+        const receipt = await tx.wait();
+
+        // Should return true
+        const result = await ngoOracle.approvedNGOs(verifiedAddress);
+        expect(result).to.equal(true);
+
+        // Check emitted event
+        const event = receipt.logs.find(
+        (log) => log.fragment && log.fragment.name === "NGOVerified"
+        );
+        expect(event).to.not.be.undefined;
+        expect(event.args.ngo).to.equal(verifiedAddress);
+    });
+
+    it("should return false and emit NGORejected for unverified NGO", async function () {
+        const unverifiedAddress = unverifiedNGO.address;
+
+        // Call verifyNGO
+        const tx = await ngoOracle.verifyNGO(unverifiedAddress);
+        const receipt = await tx.wait();
+
+        // Check it returns false
+        const isApproved = await ngoOracle.approvedNGOs(unverifiedAddress);
+        expect(isApproved).to.equal(false);
+
+        // Check NGORejected event emitted
+        const event = receipt.logs.find(
+        (log) => log.fragment && log.fragment.name === "NGORejected"
+        );
+        expect(event).to.not.be.undefined;
+        expect(event.args.ngo).to.equal(unverifiedAddress);
+    });
+  });
+  
 
   describe("ProposalManager", function () {
     let proposaltarget, proposalId;
+
     const milestonesDesc = ["Build school", "Purchase books"];
     const milestonesAmt = [ethers.parseEther("1"), ethers.parseEther("2")];
 
@@ -821,4 +899,27 @@ describe("CharityDAO Contracts", function () {
     });
   });
   */
+});
+    it("Should create proposal given the correct details", async function () {
+        expect(await proposal.ngo()).to.equal(ngo.address);
+        expect(await proposal.treasury()).to.equal(treasury.target);
+        expect(await proposal.totalFunds()).to.equal(totalFunds);
+        expect(await proposal.fundsDisbursed()).to.equal(0);
+        expect(await proposal.isApproved()).to.equal(false);
+        expect(await proposal.milestoneCount()).to.equal(2);
+
+        const milestone0 = await proposal.getMilestone(0);
+        expect(milestone0.description).to.equal("Build school");
+        expect(milestone0.amount).to.equal(milestonesAmt[0]);
+        expect(milestone0.completed).to.equal(false);
+        expect(milestone0.released).to.equal(false);
+    });
+    
+    it("Should allow treasury/admin to approve the proposal", async function () {
+        expect(await proposal.isApproved()).to.equal(false);
+        const proposalId = 1;
+        await treasury.connect(admin).approveProposal(proposalId);
+        expect(await proposal.isApproved()).to.equal(true);
+    });
+  });
 });
