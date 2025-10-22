@@ -2,8 +2,6 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
 describe("VotingManager", function () {
-  this.timeout(120000); // 2-minute timeout
-
   let GovernanceToken, Treasury, ProposalManager, VotingManager;
   let govToken, treasury, proposalManager, votingManager;
   let proposalId;

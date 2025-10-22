@@ -47,6 +47,5 @@ describe("ProposalManager", function () {
         expect(milestone0[0]).to.equal("Build school");
         expect(milestone0[1]).to.equal(ethers.parseEther("1"));
     });
-
     // NGO should not be able to submit if not verified.
 });
