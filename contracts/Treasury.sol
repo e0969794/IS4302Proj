@@ -37,9 +37,12 @@ contract Treasury is AccessControl, ReentrancyGuard {
     event DonationReceived(address indexed donor, uint256 amountETH, uint256 tokens, bytes32 donationId);
     event MintRateUpdated(uint256 newRate);
     event VotingManagerSet(address votingManager);
+    
+    // Timelock Events
     event TimelockQueued(uint256 indexed id, address indexed proposer, address indexed recipient, uint256 amount, uint256 eta);
     event TimelockExecuted(uint256 indexed id, address indexed recipient, uint256 amount);
     event TimelockCanceled(uint256 indexed id, address indexed caller);
+    
     event FundsTransferred(address recipient, uint256 amount);
 
     constructor(address admin, address govToken, uint256 initialRate, uint256 _minDelay, uint256 _gracePeriod) {

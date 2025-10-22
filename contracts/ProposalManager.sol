@@ -123,6 +123,7 @@ contract ProposalManager is AccessControl {
         return ngoProposals[ngo];
     }
 
+    //Edit this
     function getProposal(uint256 proposalId) external view returns (address) {
         Proposal storage p = proposals[proposalId];
         require(p.id != 0, "Proposal does not exist");
