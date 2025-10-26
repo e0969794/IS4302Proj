@@ -91,21 +91,27 @@ contract ProposalManager is AccessControl {
         return (m.description, m.amount, m.completed, m.released);
     }
 
-    function _verifyMilestone(uint256 proposalId, uint256 index, bytes32 proofHash) 
-        external
-        onlyRole(PROOF_ORACLE) {
-            Proposal storage p = proposals[proposalId]; 
-            require(index < p.milestones.length, "Invalid milestone index");
+    /**
+     * @notice Verifies a milestone by storing its proof hash (called by ProofOracle)
+     * @param proposalId The ID of the proposal
+     * @param index The index of the milestone
+     * @param proofHash Hash of the IPFS proof URL
+     */
+    function verifyMilestone(uint256 proposalId, uint256 index, bytes32 proofHash) 
+    external
+    onlyRole(PROOF_ORACLE) {
+        require(proposals[proposalId].id != 0, "Proposal does not exist");
+        require(index < proposals[proposalId].milestones.length, "Invalid milestone index");
 
-            Milestone storage m = p.milestones[index]; 
-            require(!m.completed, "Already verified");
-            require(m.proofHash == bytes32(0), "Already contains a proof");
+        Milestone storage m = proposals[proposalId].milestones[index]; 
+        require(!m.completed, "Already verified");
+        require(m.proofHash == bytes32(0), "Already contains a proof");
 
-            m.proofHash = proofHash;
-            m.completed = true;
+        m.proofHash = proofHash;
+        m.completed = true;
 
-            emit MilestoneVerified(proposalId, index);
-        }
+        emit MilestoneVerified(proposalId, index);
+    }
 
     function getAllProjects() external view returns (Proposal[] memory) {
         Proposal[] memory all = new Proposal[](nextProposalId - 1);
@@ -123,11 +129,25 @@ contract ProposalManager is AccessControl {
         return ngoProposals[ngo];
     }
 
-    //Edit this
-    function getProposal(uint256 proposalId) external view returns (address) {
+    /**
+     * @notice Retrieves all details of a proposal, including its milestones
+     * @param proposalId The ID of the proposal
+     * @return id The proposal ID
+     * @return ngo The address of the NGO
+     * @return totalFunds The total funds allocated to the proposal
+     * @return fundsDisbursed The funds already disbursed
+     * @return milestones An array of milestones with their details
+     */
+    function getProposal(uint256 proposalId) external view returns (
+        uint256 id,
+        address ngo,
+        uint256 totalFunds,
+        uint256 fundsDisbursed,
+        Milestone[] memory milestones
+    ) {
         Proposal storage p = proposals[proposalId];
         require(p.id != 0, "Proposal does not exist");
-        return p.ngo;
+        return (p.id, p.ngo, p.totalFunds, p.fundsDisbursed, p.milestones);
     }
 
     function getDAOAdmin() external view returns (bytes32) {
