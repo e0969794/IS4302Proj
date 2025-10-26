@@ -34,10 +34,9 @@ contract ProposalManager is AccessControl {
     mapping(address => uint256[]) public ngoProposals;
 
     event ProposalCreated(uint256 indexed proposalId, address indexed ngo);
-    event MilestoneVerified(uint256 indexed proposalId, uint256 milestoneIndex);
     event MilestoneCompleted(uint256 indexed proposalId, uint256 milestoneIndex);
 
-    constructor(address _admin, address _treasury) {
+    constructor(address _admin, address _treasury, address _proofOracle) {
         require(_admin != address(0), "Invalid admin address");
         admin = _admin;
         treasury = ITreasury(_treasury);
@@ -45,6 +44,7 @@ contract ProposalManager is AccessControl {
         
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
         _grantRole(PROPOSAL_MANAGER_ADMIN, _admin);
+        _grantRole(PROOF_ORACLE, _proofOracle); // This was missing previously
     }
 
     function createProposal(
@@ -109,8 +109,6 @@ contract ProposalManager is AccessControl {
 
         m.proofHash = proofHash;
         m.completed = true;
-
-        emit MilestoneVerified(proposalId, index);
     }
 
     function getAllProjects() external view returns (Proposal[] memory) {

@@ -1,5 +1,6 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
+const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 
 describe("CharityDAO Contracts", function () {
     let GovernanceToken, Treasury, Proposal, NGOOracle;
@@ -7,18 +8,35 @@ describe("CharityDAO Contracts", function () {
     let wallets = {
         admin: null,
         donor: [],
-        ngo: []
+        ngo: [],
+        multiSig: null, // For ORACLE_ADMIN, need to be gnosis safe in production
     };
+    let unverifiedNGO;
     let ngoDetails = [
         "Red Cross International - Humanitarian aid and disaster relief",
         "Save the Children - Education and health programs for children",
         "World Wildlife Fund - Environmental conservation and research",
         "Global Health Corps - Improving healthcare access in underserved regions"
     ];
+    let mockIpfsUrl = "ipfs://QmTest1234567890"; // Mock IPFS URL for JSON whitelist
     let numNGOs = ngoDetails.length; // Number of NGO wallets to generate
     let initialMintRate = ethers.parseEther("1"); // 1 GOV per 1 ETH
     let minDelay = 3600; // 1 hour in seconds
     let gracePeriod = 86400; // 1 day in seconds
+
+    // Mock JSON content for testing
+    const mockJson = {
+        ngos: ngoDetails.map((detail, i) => ({
+            // Will be set in beforeEach
+            address: null,
+            // e.g. "Red Cross International"
+            name: detail.split(" - ")[0],
+            // e.g. "Humanitarian aid and disaster relief"
+            description: detail.split(" - ")[1],
+            // Mock registration IDs (REG1, REG2, etc.)
+            registrationId: i < ngoDetails.length - 1 ? `REG${i + 1}` : "UNREG", 
+        })),
+    };
 
     before(async function () {
         // Get signers
@@ -28,18 +46,19 @@ describe("CharityDAO Contracts", function () {
         wallets.admin = accounts[0]; // Deployer/admin (Signer)
         wallets.donor = [accounts[1], accounts[2]]; // Donors (Signers)
         wallets.ngo = []; // Initialize ngo array
+        wallets.multiSig = accounts[19]; // Simulate multi-sig wallet
 
-        // Ensure enough accounts (1 admin + 2 donors + 4 NGOs = 7)
-        if (accounts.length < numNGOs + 1 + wallets.donor.length) {
+        // Ensure enough accounts (1 admin + 2 donors + 1 multi-sig + 4 NGOs = 8)
+        if (accounts.length < numNGOs + 2 + wallets.donor.length) {
             throw new Error(`Not enough accounts. 
-                Required: ${numNGOs + 1 + wallets.donor.length}, Available: ${accounts.length}`);
+                Required: ${numNGOs + 2 + wallets.donor.length}, Available: ${accounts.length}`);
         }
 
         // Derive private keys for NGOs
         const mnemonic = "test test test test test test test test test test test junk";
         const rootWallet = ethers.HDNodeWallet.fromPhrase(mnemonic, "", "m/44'/60'/0'/0");
-        // Populate ngoWallets with verified NGOs (accounts[1] to accounts[ngoDetails.length - 1])
-        for (let i = 3; i < numNGOs + wallets.donor.length; i++) {
+        // Populate ngoWallets with NGOs
+        for (let i = 3; i <= numNGOs + wallets.donor.length; i++) {
             const path = `${i}`;
             const wallet = rootWallet.derivePath(path);
 
@@ -51,70 +70,23 @@ describe("CharityDAO Contracts", function () {
                     signer: accounts[i], // Start from accounts[3]
                     privateKey: wallet.privateKey
             });
+            // Update mockJson with NGO addresses
+            mockJson.ngos[i - 3].address = accounts[i].address;
         }
-        // Unverified NGO (accounts[ngoDetails.length - 1])
-        const unverifiedPath = `${numNGOs + wallets.donor.length}`;
-        const unverifiedWallet = rootWallet.derivePath(unverifiedPath);
-
-        if (unverifiedWallet.address.toLowerCase() !== 
-        accounts[numNGOs + wallets.donor.length].address.toLowerCase()) {
-            throw new Error(`Address mismatch for unverified NGO: 
-                expected ${accounts[numNGOs + wallets.donor.length].address},
-                got ${unverifiedWallet.address}`);
-        }
-        wallets.ngo.push({
-            signer: accounts[numNGOs + 2],
-            privateKey: unverifiedWallet.privateKey,
-        });
+        // Use last NGO as unverified
+        unverifiedNGO = wallets.ngo[wallets.ngo.length - 1];
 
         // Debug logs (run once at start)
         console.log(`Deployer: ${wallets.admin.address}`);
+        console.log(`Multi-Sig: ${wallets.multiSig.address}`);
         console.log(`Donors: ${wallets.donor.map(d => d.address).join(", ")}`);
         wallets.ngo.forEach((w, i) => {
             console.log(`NGO ${i + 1}: Address=${w.signer.address}, PrivateKey=${w.privateKey}`);
         });
+        console.log("Mock JSON:", JSON.stringify(mockJson, null, 2));
     });
 
     beforeEach(async function () {
-        // Get the list of accounts from Hardhat's provider
-        const accounts = await ethers.getSigners();
-
-        // Reset ngo array to prevent accumulation
-        wallets.ngo = [];
-
-        // Derive private keys from Hardhat's default mnemonic
-        const mnemonic = "test test test test test test test test test test test junk";
-        const rootWallet = ethers.HDNodeWallet.fromPhrase(mnemonic, "", "m/44'/60'/0'/0"); // Base path
-
-        // Populate ngoWallets with verified NGOs (accounts[1] to accounts[ngoDetails.length - 1])
-        for (let i = 3; i < numNGOs + wallets.donor.length; i++) {
-            const path = `${i}`;
-            const wallet = rootWallet.derivePath(path);
-
-            if (wallet.address.toLowerCase() !== accounts[i].address.toLowerCase()) {
-                throw new Error(`Address mismatch for account ${i}: 
-                    expected ${accounts[i].address}, got ${wallet.address}`);
-            }
-            wallets.ngo.push({
-                    signer: accounts[i], // Start from accounts[3]
-                    privateKey: wallet.privateKey
-            });
-        }
-        // Unverified NGO (accounts[ngoDetails.length - 1])
-        const unverifiedPath = `${numNGOs + wallets.donor.length}`;
-        const unverifiedWallet = rootWallet.derivePath(unverifiedPath);
-
-        if (unverifiedWallet.address.toLowerCase() !== 
-        accounts[numNGOs + wallets.donor.length].address.toLowerCase()) {
-            throw new Error(`Address mismatch for unverified NGO: 
-                expected ${accounts[numNGOs + wallets.donor.length].address},
-                got ${unverifiedWallet.address}`);
-        }
-        wallets.ngo.push({
-            signer: accounts[numNGOs + 2],
-            privateKey: unverifiedWallet.privateKey,
-        });
-
         // Deploy GovernanceToken
         GovernanceToken = await ethers.getContractFactory("GovernanceToken");
         govToken = await GovernanceToken.deploy(wallets.admin.address);
@@ -128,16 +100,32 @@ describe("CharityDAO Contracts", function () {
 
         // Grant MINTER_ROLE to Treasury
         const MINTER_ROLE = await govToken.MINTER_ROLE();
-        await govToken.connect(accounts[0]).grantRole(MINTER_ROLE, treasury.target);
+        await govToken.connect(wallets.admin).grantRole(MINTER_ROLE, treasury.target);
 
-        // Deploy NGOOracle
-        const ngoAddresses = wallets.ngo.slice(0, numNGOs - 1).map(w => w.signer.address);
+        // Deploy NGOOraclewith mock IPFS URL
+        const ngoAddresses = wallets.ngo.slice(0, numNGOs - 1).map((w) => w.signer.address);
         NGOOracle = await ethers.getContractFactory("NGOOracle");
-        ngoOracle = await NGOOracle.deploy(ngoAddresses, ngoDetails.slice(0, numNGOs - 1));
+        ngoOracle = await NGOOracle.deploy(ngoAddresses, mockIpfsUrl);
         await ngoOracle.waitForDeployment();
 
-        // Load Proposal contract factory
-        Proposal = await ethers.getContractFactory("Proposal");
+        // Deploy ProposalManager
+        ProposalManager = await ethers.getContractFactory("ProposalManager");
+        proposalManager = await ProposalManager.deploy(
+            wallets.admin.address, treasury.target, ngoOracle.target);
+        await proposalManager.waitForDeployment();
+
+        // Deploy ProofOracle
+        ProofOracle = await ethers.getContractFactory("ProofOracle");
+        proofOracle = await ProofOracle.deploy(proposalManager.target, ngoOracle.target);
+        await proofOracle.waitForDeployment();
+
+        // Grant PROOF_ORACLE role to ProofOracle in ProposalManager
+        const PROOF_ORACLE_ROLE = await proposalManager.PROOF_ORACLE();
+        await proposalManager.connect(wallets.admin).grantRole(PROOF_ORACLE_ROLE, proofOracle.target);
+
+        // Transfer ORACLE_ADMIN to multi-sig
+        await ngoOracle.connect(wallets.admin).transferAdminRole(wallets.multiSig.address);
+        await proofOracle.connect(wallets.admin).transferAdminRole(wallets.multiSig.address);
     });
 
     describe("GovernanceToken", function () {
@@ -258,11 +246,11 @@ describe("CharityDAO Contracts", function () {
             .withArgs(wallets.donor[0].address, donationAmount, expectedMint, event.args.donationId);
 
             expect(await govToken.balanceOf(wallets.donor[0].address)).to.equal(expectedMint);
-            expect(await treasury.getGovTokenBalance(wallets.donor[0].address)).to.equal(expectedMint);
+            expect(await treasury.connect(wallets.donor[0]).getGovTokenBalance()).to.equal(expectedMint);
             expect(await ethers.provider.getBalance(treasury.target)).to.equal(donationAmount);
         });
 
-        it("should revert when ETH is sent directly to the Treasury", async function () {
+        it("Should revert when ETH is sent directly to the Treasury", async function () {
             const donationAmount = ethers.parseEther("2");
             await expect(wallets.donor[0]
                 .sendTransaction({ to: treasury.target, value: donationAmount }))
@@ -328,45 +316,189 @@ describe("CharityDAO Contracts", function () {
         });
     });
     
-    describe("NGOOracleMock", function () {
-        let unverifiedNGO;
-
-        beforeEach(async function () {
-            unverifiedNGO = wallets.ngo[wallets.ngo.length - 1]; // Use last NGO (unverified)
-        });
-        
-        it("should pre-approve 3 NGOs at deployment", async function () {
+    describe("NGOOracle", function () {
+        it("Should initialize with correct IPFS URL and approved NGOs", async function () {
+            expect(await ngoOracle.getNGODetailsUrl()).to.equal(mockIpfsUrl);
             for (let i = 0; i < wallets.ngo.length - 1; i++) {
                 expect(await ngoOracle.approvedNGOs(wallets.ngo[i].signer.address)).to.equal(true);
-                const details = await ngoOracle.ngoDetails(wallets.ngo[i].signer.address);
-                expect(details).to.equal(ngoDetails[i]);
+            }
+            expect(await ngoOracle.approvedNGOs(unverifiedNGO.signer.address)).to.equal(false);
+        });
+
+        it("Should simulate JSON parsing and verify NGO details", async function () {
+            // Simulate fetching and parsing the JSON from the IPFS URL
+            const ipfsUrl = await ngoOracle.getNGODetailsUrl();
+            expect(ipfsUrl).to.equal(mockIpfsUrl);
+
+            // Mock JSON parsing (in a real app, this would be fetched from Pinata)
+            for (let i = 0; i < wallets.ngo.length - 1; i++) {
+                const ngo = mockJson.ngos[i];
+                expect(ngo.address.toLowerCase()).to.equal(wallets.ngo[i].signer.address.toLowerCase());
+                expect(ngo.name).to.equal(ngoDetails[i].split(" - ")[0]);
+                expect(ngo.description).to.equal(ngoDetails[i].split(" - ")[1]);
+                expect(ngo.registrationId).to.equal(`REG${i + 1}`);
             }
         });
 
-        it("should return true and emit NGOVerified for verified NGO", async function () {
+        it("Should emit NGOApproved events during initialization", async function () {
+            const tx = await ngoOracle.deploymentTransaction();
+            const receipt = await tx.wait();
+            const events = receipt.logs
+                .map((log) => {
+                try {
+                    return ngoOracle.interface.parseLog(log);
+                } catch {
+                    return null;
+                }
+                })
+                .filter((e) => e && e.name === "NGOApproved");
+
+            expect(events.length).to.equal(wallets.ngo.length - 1);
+            for (let i = 0; i < wallets.ngo.length - 1; i++) {
+                expect(events[i].args.ngo).to.equal(wallets.ngo[i].signer.address);
+            }
+        });
+
+        it("Should return true and emit NGOVerified for verified NGO", async function () {
             const verifiedAddress = wallets.ngo[0].signer.address;
             const tx = await ngoOracle.connect(wallets.admin).verifyNGO(verifiedAddress);
             const receipt = await tx.wait();
 
-            const result = await ngoOracle.approvedNGOs(verifiedAddress);
-            expect(result).to.equal(true);
-
-            const event = receipt.logs.find(log => log.fragment?.name === "NGOVerified");
-            expect(event).to.not.be.undefined;
-            expect(event.args.ngo).to.equal(verifiedAddress);
+            expect(await ngoOracle.approvedNGOs(verifiedAddress)).to.equal(true);
+            await expect(tx).to.emit(ngoOracle, "NGOVerified").withArgs(verifiedAddress, anyValue);
         });
 
-        it("should return false and emit NGORejected for unverified NGO", async function () {
+        it("Should return false and emit NGORejected for unverified NGO", async function () {
             const unverifiedAddress = unverifiedNGO.signer.address;
             const tx = await ngoOracle.connect(wallets.admin).verifyNGO(unverifiedAddress);
             const receipt = await tx.wait();
 
-            const isApproved = await ngoOracle.approvedNGOs(unverifiedAddress);
-            expect(isApproved).to.equal(false);
+            expect(await ngoOracle.approvedNGOs(unverifiedAddress)).to.equal(false);
+            await expect(tx).to.emit(ngoOracle, "NGORejected").withArgs(unverifiedAddress, anyValue);
+        });
 
-            const event = receipt.logs.find(log => log.fragment?.name === "NGORejected");
-            expect(event).to.not.be.undefined;
-            expect(event.args.ngo).to.equal(unverifiedAddress);
+        it("Should allow ORACLE_ADMIN to approve a new NGO", async function () {
+            const newNGO = unverifiedNGO.signer.address;
+            const newIpfsUrl = "ipfs://QmTest4567890";
+            await ngoOracle.connect(wallets.multiSig).approveNGO(newNGO, newIpfsUrl);
+
+            expect(await ngoOracle.approvedNGOs(newNGO)).to.equal(true);
+            expect(await ngoOracle.getNGODetailsUrl()).to.equal(newIpfsUrl);
+            await expect(ngoOracle.connect(wallets.multiSig).approveNGO(newNGO, newIpfsUrl)).to.be.revertedWith(
+                "NGO already approved"
+            );
+        });
+
+        it("Should revert approveNGO if not ORACLE_ADMIN", async function () {
+            const newNGO = unverifiedNGO.signer.address;
+            const newIpfsUrl = "ipfs://QmTest4567890";
+            await expect(
+                ngoOracle.connect(wallets.donor[0]).approveNGO(newNGO, newIpfsUrl)
+            ).to.be.revertedWithCustomError(ngoOracle, "AccessControlUnauthorizedAccount");
+        });
+
+        it("Should allow ORACLE_ADMIN to revoke an NGO", async function () {
+            const ngoAddress = wallets.ngo[0].signer.address;
+            const newIpfsUrl = "ipfs://QmTest4567890";
+            await ngoOracle.connect(wallets.multiSig).revokeNGO(ngoAddress, newIpfsUrl);
+
+            expect(await ngoOracle.approvedNGOs(ngoAddress)).to.equal(false);
+            expect(await ngoOracle.getNGODetailsUrl()).to.equal(newIpfsUrl);
+            await expect(ngoOracle.connect(wallets.multiSig).revokeNGO(ngoAddress, newIpfsUrl)).to.be.revertedWith(
+                "NGO not approved"
+            );
+        });
+
+        it("Should revert revokeNGO if not ORACLE_ADMIN", async function () {
+            const ngoAddress = wallets.ngo[0].signer.address;
+            const newIpfsUrl = "ipfs://QmTest4567890";
+            await expect(
+                ngoOracle.connect(wallets.donor[0]).revokeNGO(ngoAddress, newIpfsUrl)
+            ).to.be.revertedWithCustomError(ngoOracle, "AccessControlUnauthorizedAccount");
+        });
+
+        it("Should allow ORACLE_ADMIN to update IPFS URL", async function () {
+            const newIpfsUrl = "ipfs://QmTest4567890";
+            const tx = await ngoOracle.connect(wallets.multiSig).updateNGODetailsUrl(newIpfsUrl);
+            await expect(tx).to.emit(ngoOracle, "NGOWhitelistUpdated").withArgs(newIpfsUrl, anyValue);
+            expect(await ngoOracle.getNGODetailsUrl()).to.equal(newIpfsUrl);
+        });
+
+        it("Should revert updateNGODetailsUrl if not ORACLE_ADMIN", async function () {
+            const newIpfsUrl = "ipfs://QmTest4567890";
+            await expect(
+                ngoOracle.connect(wallets.donor[0]).updateNGODetailsUrl(newIpfsUrl)
+            ).to.be.revertedWithCustomError(ngoOracle, "AccessControlUnauthorizedAccount");
+        });
+    });
+
+    describe("ProofOracle", function () {
+        it("Should initialize with correct ProposalManager and NGOOracle", async function () {
+            expect(await proofOracle.proposalManager()).to.equal(proposalManager.target);
+            expect(await proofOracle.ngoOracle()).to.equal(ngoOracle.target);
+            expect(await proofOracle.hasRole(await proofOracle.ORACLE_ADMIN(), wallets.multiSig.address)).to.be.true;
+        });
+
+        it("Should allow ORACLE_ADMIN to verify a milestone", async function () {
+            const ngo = wallets.ngo[0].signer;
+            const totalFunds = ethers.parseEther("3");
+            const milestonesDesc = ["Build school", "Purchase books"];
+            const milestonesAmt = [ethers.parseEther("1"), ethers.parseEther("2")];
+
+            // Create proposal
+            await proposalManager.connect(ngo).createProposal(totalFunds, milestonesDesc, milestonesAmt);
+            const proofUrl = "ipfs://QmProof123";
+
+            // Verify milestone
+            const tx = await proofOracle
+                .connect(wallets.multiSig)
+                .verifyMilestone(1, 0, proofUrl, ngo.address);
+            await expect(tx)
+                .to.emit(proofOracle, "MilestoneVerified")
+                .withArgs(1, 0, ethers.keccak256(ethers.toUtf8Bytes(proofUrl)), proofUrl, ngo.address);
+
+            const proposal = await proposalManager.getProposal(1);
+            expect(proposal.milestones[0].completed).to.equal(true);
+            expect(proposal.milestones[0].proofHash).to.equal(ethers.keccak256(ethers.toUtf8Bytes(proofUrl)));
+        });
+
+        it("Should revert verifyMilestone if not ORACLE_ROLE", async function () {
+            const ngo = wallets.ngo[0].signer;
+            const proofUrl = "ipfs://QmProof123";
+            await expect(
+                proofOracle.connect(wallets.donor[0]).verifyMilestone(1, 0, proofUrl, ngo.address)
+            ).to.be.revertedWithCustomError(proofOracle, "AccessControlUnauthorizedAccount");
+        });
+
+        it("Should revert verifyMilestone for unapproved NGO", async function () {
+            const unverifiedNGO = wallets.ngo[wallets.ngo.length - 1].signer;
+            const proofUrl = "ipfs://QmProof123";
+            await expect(
+                proofOracle.connect(wallets.multiSig).verifyMilestone(1, 0, proofUrl, unverifiedNGO.address)
+            ).to.be.revertedWith("NGO not approved");
+        });
+
+        it("Should revert verifyMilestone for invalid inputs", async function () {
+            const ngo = wallets.ngo[0].signer;
+            await expect(
+                proofOracle.connect(wallets.multiSig).verifyMilestone(1, 0, "", ngo.address)
+            ).to.be.revertedWith("Proof URL cannot be empty");
+            await expect(
+                proofOracle.connect(wallets.multiSig).verifyMilestone(1, 0, "http://invalid", ngo.address)
+            ).to.be.revertedWith("Invalid IPFS URL format");
+            await expect(
+                proofOracle.connect(wallets.multiSig).verifyMilestone(1, 0, "ipfs://QmProof123", ethers.ZeroAddress)
+            ).to.be.revertedWith("Invalid NGO address");
+        });
+
+        it("Should allow ORACLE_ADMIN to transfer ORACLE_ADMIN role", async function () {
+            const newOracle = wallets.donor[0].address;
+            const tx = await proofOracle.connect(wallets.multiSig).transferAdminRole(newOracle);
+            await expect(tx)
+                .to.emit(proofOracle, "AdminRoleTransferred")
+                .withArgs(wallets.multiSig.address, newOracle);
+            expect(await proofOracle.hasRole(await proofOracle.ORACLE_ADMIN(), newOracle)).to.be.true;
+            expect(await proofOracle.hasRole(await proofOracle.ORACLE_ADMIN(), wallets.multiSig.address)).to.be.false;
         });
     });
 
