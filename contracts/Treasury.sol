@@ -7,7 +7,7 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 interface IGovToken {
     function mintOnDonation(address to, uint256 amount, bytes32 donationId) external;
     function balanceOf(address account) external view returns (uint256);
-    function burn(address from, uint amount) external;
+    function burn(address from, uint amount, bytes32 burnId) external;
 }
 
 contract Treasury is AccessControl, ReentrancyGuard {
@@ -19,6 +19,7 @@ contract Treasury is AccessControl, ReentrancyGuard {
     uint256 public mintRate; // GOV tokens per wei (e.g. 1e18 => 1 ETH = 1 GOV)
 
     event DonationReceived(address indexed donor, uint256 amountETH, uint256 tokens, bytes32 donationId);
+    event fundsDisbursed(address indexed ngo, uint256 amountETH, bytes32 disbursementId);
     event MintRateUpdated(uint256 newRate);
 
     constructor(address admin, address govToken, uint256 initialRate) {
@@ -58,7 +59,9 @@ contract Treasury is AccessControl, ReentrancyGuard {
     }
 
     function burnETH(address user, uint256 amount) external nonReentrant onlyRole(BURNER_ROLE) {
-        token.burn(user, amount) ;
+        bytes32 burnId = keccak256(abi.encode(msg.sender, block.number, amount));
+        token.burn(user, amount, burnId);
+    }
 
 
     function disburseMilestoneFunds(address payable ngo, uint256 tokenAmount) external onlyRole(DISBURSER_ROLE) {
@@ -67,6 +70,11 @@ contract Treasury is AccessControl, ReentrancyGuard {
 
         (bool success, ) = ngo.call{value: weiAmount}("");
         require(success, "Ether transfer failed");
+
+        bytes32 disbursementId = keccak256(abi.encode(ngo, block.number, tokenAmount));
+
+        uint256 fundAmount = weiAmount/ 1e18; // Scale to get 1 GOV per 1 ETH
+        emit fundsDisbursed(ngo, fundAmount, disbursementId);
     }
 
 }

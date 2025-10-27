@@ -36,7 +36,7 @@ contract VotingManager is AccessControl, ReentrancyGuard {
     mapping(uint256 => uint256) public proposalVotesMapping; //maps proposalId to the number of votes it has
     mapping(uint256 => uint) public nextMilestoneMapping; //maps proposalId to its next milestone
 
-    event VoteCast(address indexed voter, uint256 indexed proposalId, uint256 votes, uint256 creditsSpent);
+    event VoteCast(address indexed voter, uint256 indexed proposalId, bytes32 voteId, uint256 votes);
     event MilestoneUnlocked(uint256 indexed proposalId, uint256 milestoneIndex, uint256 amountReleased, uint256 timelockId);
 
     constructor(
@@ -91,6 +91,8 @@ contract VotingManager is AccessControl, ReentrancyGuard {
         //1. burn tokens
         //2. add into proposal's votes
         //3. processProposal
+
+        bytes32 voteId = keccak256(abi.encode(msg.sender, block.number, votes)); 
         require(votes > 0, "Must cast at least 1 vote");
 
         uint256 tokensRequired = votes * votes;
@@ -101,6 +103,7 @@ contract VotingManager is AccessControl, ReentrancyGuard {
 
         //dont need to check if it doesnt exist because by default it is 0
         proposalVotesMapping[proposalId] += votes;
+        emit VoteCast(msg.sender, proposalId, voteId, votes);
 
 
     }
