@@ -93,24 +93,6 @@ contract VotingManager is AccessControl, ReentrancyGuard {
         }
         return currIndex;
     }
-
-    // function vote(uint256 proposalId, uint256 votes) external nonReentrant {
-    //     //1. burn tokens
-    //     //2. add into proposal's votes
-    //     //3. processProposal
-    //     require(votes > 0, "Must cast at least 1 vote");
-
-    //     uint256 tokensRequired = votes * votes;
-
-    //     require(treasury.getTokenBalance(msg.sender) >= tokensRequired, "Insufficient credits");
-
-    //     treasury.burnETH(msg.sender, tokensRequired);
-
-    //     //dont need to check if it doesnt exist because by default it is 0
-    //     proposalVotesMapping[proposalId] += votes;
-
-
-    // }
     function vote(uint256 proposalId, uint256 newVotes) external nonReentrant {
         require(newVotes > 0, "Must cast at least 1 vote");
 
