@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-
 contract ProposalManager {
+    address public proofOracle;
     uint256 public nextProposalId;
 
     struct Milestone {
         string description;
         uint256 amount; //should be cumulative, if milestone 1 is 100, milestone 2 >=101
+        bool verified;
     }
 
     struct Proposal {
@@ -21,12 +22,20 @@ contract ProposalManager {
     // NGO address -> proposalIds
 
     event ProposalCreated(uint256 indexed proposalId, address ngo);
-    event MilestoneVerified(uint256 indexed proposalId, uint256 milestoneIndex);
-    event MilestoneCompleted(uint256 indexed proposalId, uint256 milestoneIndex);
 
-    //dont need to grant role because there isnt any permissions involved for this contract's operations. i dont think we need to grant admin
     constructor() {
         nextProposalId = 1;
+    }
+
+    modifier onlyProofOracle() {
+        require(msg.sender == proofOracle, "Caller is not the ProofOracle");
+        _;
+    }
+
+    function setProofOracle(address _proofOracle) external {
+        require(proofOracle == address(0), "ProofOracle address already set");
+        require(_proofOracle != address(0), "Invalid address");
+        proofOracle = _proofOracle;
     }
 
     function createProposal(
@@ -50,7 +59,8 @@ contract ProposalManager {
             p.milestones.push(
                 Milestone({
                     description: milestoneDescriptions[i],
-                    amount: milestoneAmounts[i]
+                    amount: milestoneAmounts[i],
+                    verified: false
                 })
             );
         }
@@ -73,4 +83,21 @@ contract ProposalManager {
         }
         return all;
     }
+
+    /**
+     * @notice Verifies a milestone, callable ONLY by the ProofOracle
+     * @param proposalId ID of the proposal
+     * @param index Index of the milestone
+     */
+    function _verifyMilestone(uint256 proposalId, uint256 index)
+        external 
+        onlyProofOracle()
+    {
+        require(proposals[proposalId].id != 0, "Proposal does not exist");
+        require(index < proposals[proposalId].milestones.length, "Invalid milestone index");
+
+        Milestone storage m = proposals[proposalId].milestones[index];
+        m.verified = true;
+    }
+
 }
