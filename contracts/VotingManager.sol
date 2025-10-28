@@ -35,9 +35,10 @@ contract VotingManager is AccessControl, ReentrancyGuard {
 
     mapping(uint256 => uint256) public proposalVotesMapping; //maps proposalId to the number of votes it has
     mapping(uint256 => uint) public nextMilestoneMapping; //maps proposalId to its next milestone
+    mapping(uint256 => mapping(address => uint256)) public userVotes;
 
     event VoteCast(address indexed voter, uint256 indexed proposalId, bytes32 voteId, uint256 votes);
-    event MilestoneUnlocked(uint256 indexed proposalId, uint256 milestoneIndex, uint256 amountReleased, uint256 timelockId);
+    event MilestoneUnlocked(uint256 indexed proposalId, uint256 milestoneIndex, uint256 amountReleased);
 
     constructor(
         address admin,
@@ -56,7 +57,7 @@ contract VotingManager is AccessControl, ReentrancyGuard {
 
     //called by anyone or called by vote function
     function _processProposal(uint256 proposalId) internal {
-        uint256 currVotes = proposalVotesMapping[proposalId];
+        uint256 currVotes = proposalVotesMapping[proposalId] * 1e14;
         IProposalManager.Proposal memory p = proposalManager.getProposal(proposalId);
         uint nextMilestone = nextMilestoneMapping[proposalId];
         if (currVotes >= p.milestones[nextMilestone].amount) { //strict assumption that there milestones are hit one at a time 
@@ -68,7 +69,13 @@ contract VotingManager is AccessControl, ReentrancyGuard {
                 tokenAmount = p.milestones[nextMilestone].amount;
             }
             _disburseMilestoneFunds(payable (p.ngo), tokenAmount);
-            nextMilestoneMapping[proposalId]++;
+
+            emit MilestoneUnlocked(
+            proposalId,
+            nextMilestone,
+            tokenAmount);
+
+            nextMilestoneMapping[proposalId]++;     
         }
         
     }
@@ -86,27 +93,28 @@ contract VotingManager is AccessControl, ReentrancyGuard {
         }
         return currIndex;
     }
-
-    function vote(uint256 proposalId, uint256 votes) external nonReentrant {
-        //1. burn tokens
-        //2. add into proposal's votes
-        //3. processProposal
+    function vote(uint256 proposalId, uint256 newVotes) external nonReentrant {
+        require(newVotes > 0, "Must cast at least 1 vote");
 
         bytes32 voteId = keccak256(abi.encode(msg.sender, block.number, votes)); 
-        require(votes > 0, "Must cast at least 1 vote");
+        uint256 previousVotes = userVotes[proposalId][msg.sender];
+        uint256 totalVotes = previousVotes + newVotes;
 
-        uint256 tokensRequired = votes * votes;
+        uint256 tokensRequired = totalVotes * totalVotes - previousVotes * previousVotes;
 
-        require(treasury.getTokenBalance(msg.sender) >= tokensRequired, "Insufficient credits");
+        require(treasury.getTokenBalance(msg.sender) >= tokensRequired * 1e18, "Insufficient credits");
 
         treasury.burnETH(msg.sender, tokensRequired);
 
+        userVotes[proposalId][msg.sender] = totalVotes;
         //dont need to check if it doesnt exist because by default it is 0
         proposalVotesMapping[proposalId] += votes;
         emit VoteCast(msg.sender, proposalId, voteId, votes);
 
+        emit VoteCast(msg.sender, proposalId, newVotes, tokensRequired);
+        _processProposal(proposalId);
+    }   
 
-    }
 
     function _disburseMilestoneFunds(address payable ngo, uint256 tokenAmount) internal {
         treasury.disburseMilestoneFunds(ngo, tokenAmount);
