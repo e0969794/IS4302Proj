@@ -22,7 +22,7 @@ interface IProposalManager {
 }
 
 interface ITreasury {
-    function disburseMilestoneFunds(address payable ngo, uint256 amountWei) external;
+    function disburseMilestoneFunds(address payable ngo, uint256 tokenAmount) external;
 
     function getTokenBalance(address from) external view returns (uint256);
 
@@ -69,14 +69,7 @@ contract VotingManager is AccessControl, ReentrancyGuard {
                 tokenAmount = p.milestones[nextMilestone].amount;
             }
             _disburseMilestoneFunds(payable (p.ngo), tokenAmount);
-
-            emit MilestoneUnlocked(
-            proposalId,
-            nextMilestone,
-            tokenAmount);
-
             nextMilestoneMapping[proposalId]++;     
-
 
             emit MilestoneUnlocked(proposalId, nextMilestone, tokenAmount);
         }
