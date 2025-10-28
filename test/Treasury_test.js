@@ -4,7 +4,7 @@ const { ethers } = require("hardhat");
 describe("Treasury", function () {
     let GovernanceToken, govToken;
     let admin, donor1, ngo;
-    let initialMintRate = ethers.parseEther("1");
+    let initialMintRate = 1;
 
     beforeEach(async function () {
     // Get signers
@@ -137,34 +137,39 @@ describe("Treasury", function () {
     });
     
     it("Should revert disburseMilestoneFunds if caller is not DISBURSER_ROLE", async function () {
-    const amountWei = ethers.parseEther("0.5");
-    
-    await expect(
-        treasury.connect(donor1).disburseMilestoneFunds(ngo.address, amountWei)
-    ).to.be.revertedWithCustomError(
-        treasury,
-        "AccessControlUnauthorizedAccount"
-    );
+        const tokensDisbursed = "0.5";
+        const weiDisbursed = ethers.parseEther(tokensDisbursed);
+        
+        await expect(
+            treasury.connect(donor1).disburseMilestoneFunds(ngo.address, weiDisbursed)
+        ).to.be.revertedWithCustomError(
+            treasury,
+            "AccessControlUnauthorizedAccount"
+        );
     });
     
     it("Should allow admin (with DISBURSER_ROLE) to disburse funds", async function () {
-    const amountWei = ethers.parseEther("0.5");
+        const tokensDonated = 2;
+        const weiDonated = ethers.parseEther(tokensDonated.toString());
+        const tokensDisbursed = 1;
+        const weiDisbursed = ethers.parseEther(tokensDisbursed.toString());
     
-    // Donate ETH so Treasury has funds
-    await treasury.connect(donor1).donateETH({ value: ethers.parseEther("1") });
-    
-    // Grant DISBURSER_ROLE to admin
-    const disburserRole = await treasury.DISBURSER_ROLE();
-    await treasury.connect(admin).grantRole(disburserRole, admin.address);
-    
-    const ngoBalanceBefore = await ethers.provider.getBalance(ngo.address);
-    
-    const tx = await treasury
-        .connect(admin)
-        .disburseMilestoneFunds(ngo.address, amountWei);
-    await tx.wait();
-    
-    const ngoBalanceAfter = await ethers.provider.getBalance(ngo.address);
-    expect(ngoBalanceAfter).to.be.gt(ngoBalanceBefore);
+        // Donate ETH so Treasury has funds
+        await treasury.connect(donor1).donateETH({ value: weiDonated }); 
+        //^^now donor should have 2 token worth of funds 
+        
+        // Grant DISBURSER_ROLE to admin
+        const disburserRole = await treasury.DISBURSER_ROLE();
+        await treasury.connect(admin).grantRole(disburserRole, admin.address);
+        
+        const ngoBalanceBefore = await ethers.provider.getBalance(ngo.address);
+        
+        const tx = await treasury
+            .connect(admin)
+            .disburseMilestoneFunds(ngo.address, tokensDisbursed);
+        await tx.wait();
+        
+        const ngoBalanceAfter = await ethers.provider.getBalance(ngo.address);
+        expect(ngoBalanceAfter).to.be.gt(ngoBalanceBefore);
     });
 });
