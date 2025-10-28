@@ -19,6 +19,7 @@ contract GovernanceToken is ERC20, ERC20Permit, ERC20Votes, AccessControl, Pausa
     }
 
     event MintedOnDonation(address indexed to, uint256 amount, bytes32 donationId);
+    event Burned(address indexed from, uint256 amount, bytes32 burnId);
 
     function pause() external onlyRole(DEFAULT_ADMIN_ROLE) { _pause(); }
     function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) { _unpause(); }
@@ -32,8 +33,9 @@ contract GovernanceToken is ERC20, ERC20Permit, ERC20Votes, AccessControl, Pausa
         emit MintedOnDonation(to, amount, donationId);
     }
 
- function burn(address from, uint256 amount) external onlyRole(TREASURY_ROLE) {
+ function burn(address from, uint256 amount, bytes32 burnId) external onlyRole(TREASURY_ROLE) {
         _burn(from, amount);
+        emit Burned(from, amount, burnId);
     }
 
     // Override nonces to resolve conflict between ERC20Permit and Nonces

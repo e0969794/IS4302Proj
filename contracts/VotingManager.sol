@@ -37,7 +37,7 @@ contract VotingManager is AccessControl, ReentrancyGuard {
     mapping(uint256 => uint) public nextMilestoneMapping; //maps proposalId to its next milestone
     mapping(uint256 => mapping(address => uint256)) public userVotes;
 
-    event VoteCast(address indexed voter, uint256 indexed proposalId, uint256 votes, uint256 creditsSpent);
+    event VoteCast(address indexed voter, uint256 indexed proposalId, bytes32 voteId, uint256 votes);
     event MilestoneUnlocked(uint256 indexed proposalId, uint256 milestoneIndex, uint256 amountReleased);
 
     constructor(
@@ -96,6 +96,7 @@ contract VotingManager is AccessControl, ReentrancyGuard {
     function vote(uint256 proposalId, uint256 newVotes) external nonReentrant {
         require(newVotes > 0, "Must cast at least 1 vote");
 
+        bytes32 voteId = keccak256(abi.encode(msg.sender, block.number, newVotes)); 
         uint256 previousVotes = userVotes[proposalId][msg.sender];
         uint256 totalVotes = previousVotes + newVotes;
 
@@ -108,8 +109,7 @@ contract VotingManager is AccessControl, ReentrancyGuard {
         userVotes[proposalId][msg.sender] = totalVotes;
         //dont need to check if it doesnt exist because by default it is 0
         proposalVotesMapping[proposalId] += newVotes;
-
-        emit VoteCast(msg.sender, proposalId, newVotes, tokensRequired);
+        emit VoteCast(msg.sender, proposalId, voteId, newVotes);
         _processProposal(proposalId);
     }   
 
