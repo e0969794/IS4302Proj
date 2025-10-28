@@ -22,7 +22,7 @@ interface IProposalManager {
 }
 
 interface ITreasury {
-    function disburseMilestoneFunds(address payable ngo, uint256 amountWei) external;
+    function disburseMilestoneFunds(address payable ngo, uint256 tokenAmount) external;
 
     function getTokenBalance(address from) external view returns (uint256);
 
@@ -57,7 +57,7 @@ contract VotingManager is AccessControl, ReentrancyGuard {
 
     //called by anyone or called by vote function
     function _processProposal(uint256 proposalId) internal {
-        uint256 currVotes = proposalVotesMapping[proposalId] * 1e14;
+        uint256 currVotes = proposalVotesMapping[proposalId];
         IProposalManager.Proposal memory p = proposalManager.getProposal(proposalId);
         uint nextMilestone = nextMilestoneMapping[proposalId];
         if (currVotes >= p.milestones[nextMilestone].amount) { //strict assumption that there milestones are hit one at a time 
@@ -69,13 +69,9 @@ contract VotingManager is AccessControl, ReentrancyGuard {
                 tokenAmount = p.milestones[nextMilestone].amount;
             }
             _disburseMilestoneFunds(payable (p.ngo), tokenAmount);
-
-            emit MilestoneUnlocked(
-            proposalId,
-            nextMilestone,
-            tokenAmount);
-
             nextMilestoneMapping[proposalId]++;     
+
+            emit MilestoneUnlocked(proposalId, nextMilestone, tokenAmount);
         }
         
     }
@@ -102,7 +98,7 @@ contract VotingManager is AccessControl, ReentrancyGuard {
 
         uint256 tokensRequired = totalVotes * totalVotes - previousVotes * previousVotes;
 
-        require(treasury.getTokenBalance(msg.sender) >= tokensRequired * 1e18, "Insufficient credits");
+        require(treasury.getTokenBalance(msg.sender) >= tokensRequired, "Insufficient credits");
 
         treasury.burnETH(msg.sender, tokensRequired);
 

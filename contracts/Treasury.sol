@@ -18,8 +18,8 @@ contract Treasury is AccessControl, ReentrancyGuard {
 
     uint256 public mintRate; // GOV tokens per wei (e.g. 1e18 => 1 ETH = 1 GOV)
 
-    event DonationReceived(address indexed donor, uint256 amountETH, uint256 tokens, bytes32 donationId);
-    event fundsDisbursed(address indexed ngo, uint256 amountETH, bytes32 disbursementId);
+    event DonationReceived(address indexed donor, uint256 tokenAmount, uint256 tokens, bytes32 donationId);
+    event fundsDisbursed(address indexed ngo, uint256 tokenAmount, bytes32 disbursementId);
     event MintRateUpdated(uint256 newRate);
 
     constructor(address admin, address govToken, uint256 initialRate) {
@@ -45,16 +45,24 @@ contract Treasury is AccessControl, ReentrancyGuard {
         _donate();
     }
 
+    function _weiToToken(uint256 weiAmount) internal view returns (uint256) {
+        return (weiAmount/1e18) * mintRate;
+    }
+
+    function _tokenToWei(uint256 tokenAmount) internal view returns (uint256) {
+        return tokenAmount/mintRate * 1e18;
+    }
+
     function _donate() internal {
         require(msg.value > 0, "zero ETH");
         require(mintRate > 0, "mintRate=0");
-
-        uint256 mintAmount = msg.value * mintRate / 1e18; // Scale to get 1 GOV per 1 ETH
+//token amount = ether amount * mint rate
+        uint256 tokenAmount = _weiToToken(msg.value); // (msg.value/1e18) is ether, (msg.value/1e18) * mintrate is tokens
         bytes32 donationId = keccak256(abi.encode(msg.sender, block.number, msg.value));
 
-        token.mintOnDonation(msg.sender, mintAmount, donationId);
+        token.mintOnDonation(msg.sender, tokenAmount, donationId);
 
-        emit DonationReceived(msg.sender, msg.value, mintAmount, donationId);
+        emit DonationReceived(msg.sender, msg.value, tokenAmount, donationId);
         // ETH stays in contract for later disbursement
     }
 
@@ -64,16 +72,14 @@ contract Treasury is AccessControl, ReentrancyGuard {
     }
 
     function disburseMilestoneFunds(address payable ngo, uint256 tokenAmount) external onlyRole(DISBURSER_ROLE) {
-        uint256 weiAmount = (tokenAmount * 1e18) / mintRate;
+        uint256 weiAmount = _tokenToWei(tokenAmount);
         require(address(this).balance  >= weiAmount, "Insufficient contract balance");
 
         (bool success, ) = ngo.call{value: weiAmount}("");
         require(success, "Ether transfer failed");
 
         bytes32 disbursementId = keccak256(abi.encode(ngo, block.number, tokenAmount));
-
-        uint256 fundAmount = weiAmount/ 1e18; // Scale to get 1 GOV per 1 ETH
-        emit fundsDisbursed(ngo, fundAmount, disbursementId);
+        emit fundsDisbursed(ngo, tokenAmount, disbursementId);
     }
 
 }
