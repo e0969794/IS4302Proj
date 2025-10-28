@@ -96,7 +96,7 @@ contract VotingManager is AccessControl, ReentrancyGuard {
     function vote(uint256 proposalId, uint256 newVotes) external nonReentrant {
         require(newVotes > 0, "Must cast at least 1 vote");
 
-        bytes32 voteId = keccak256(abi.encode(msg.sender, block.number, votes)); 
+        bytes32 voteId = keccak256(abi.encode(msg.sender, block.number, newVotes)); 
         uint256 previousVotes = userVotes[proposalId][msg.sender];
         uint256 totalVotes = previousVotes + newVotes;
 
@@ -108,10 +108,8 @@ contract VotingManager is AccessControl, ReentrancyGuard {
 
         userVotes[proposalId][msg.sender] = totalVotes;
         //dont need to check if it doesnt exist because by default it is 0
-        proposalVotesMapping[proposalId] += votes;
-        emit VoteCast(msg.sender, proposalId, voteId, votes);
-
-        emit VoteCast(msg.sender, proposalId, newVotes, tokensRequired);
+        proposalVotesMapping[proposalId] += newVotes;
+        emit VoteCast(msg.sender, proposalId, voteId, newVotes);
         _processProposal(proposalId);
     }   
 
