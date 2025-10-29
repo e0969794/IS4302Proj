@@ -6,7 +6,8 @@ describe("CharityDAO Contracts - Oracles", function () {
     // Contract Factories and Instances
     let ProposalManager, NGOOracle, ProofOracle;
     let proposalManager, ngoOracle, proofOracle;
-
+    let admin;
+    let initialMintRate = 1;
     // Wallets and Signers
     let wallets = {
         admin: null,
@@ -40,6 +41,7 @@ describe("CharityDAO Contracts - Oracles", function () {
     before(async function () {
         // Get signers
         const accounts = await ethers.getSigners();
+        [admin] = await ethers.getSigners();
 
         // Set up wallets
         wallets.admin = accounts[0]; // Deployer/admin
@@ -82,9 +84,23 @@ describe("CharityDAO Contracts - Oracles", function () {
         ngoOracle = await NGOOracle.deploy(ngoAddresses, mockIpfsUrl);
         await ngoOracle.waitForDeployment();
 
+        // Deploy GovernanceToken
+        GovernanceToken = await ethers.getContractFactory("GovernanceToken");
+        govToken = await GovernanceToken.deploy(admin.address);
+        await govToken.waitForDeployment();
+
+        // Deploy Treasury
+        Treasury = await ethers.getContractFactory("Treasury");
+        treasury = await Treasury.deploy(admin.address, govToken.target, initialMintRate);
+        await treasury.waitForDeployment();
+
+        // Now grant TREASURY_ROLE to Treasury
+        const TREASURY_ROLE = await govToken.TREASURY_ROLE();
+        await govToken.connect(admin).grantRole(TREASURY_ROLE, treasury.target);
+
         // Deploy ProposalManager
         ProposalManager = await ethers.getContractFactory("ProposalManager");
-        proposalManager = await ProposalManager.deploy();
+        proposalManager = await ProposalManager.deploy(treasury.target);
         await proposalManager.waitForDeployment();
 
         // Deploy ProofOracle

@@ -1,7 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+interface ITreasury {
+    function weiToToken(uint256 weiAmount) external view returns (uint256);
+    function tokenToWei(uint256 tokenAmount) external view returns (uint256);
+}
+
+
 contract ProposalManager {
+    ITreasury public treasury;
+
     address public proofOracle;
     uint256 public nextProposalId;
 
@@ -15,6 +23,7 @@ contract ProposalManager {
         uint256 id; //0 means not active (expired/completed)
         address ngo;
         Milestone[] milestones;
+        uint256 creation_date;
     }
 
     // proposalId -> proposalAddress
@@ -22,9 +31,12 @@ contract ProposalManager {
     // NGO address -> proposalIds
 
     event ProposalCreated(uint256 indexed proposalId, address ngo);
+    event ProposalKilled(uint256 indexed proposalId, address ngo);
 
-    constructor() {
+
+    constructor(address _treasuryAddress) {
         nextProposalId = 1;
+        treasury = ITreasury(_treasuryAddress);
     }
 
     modifier onlyProofOracle() {
@@ -54,12 +66,13 @@ contract ProposalManager {
         Proposal storage p = proposals[proposalId];
         p.id = proposalId;
         p.ngo = msg.sender;
+        p.creation_date = block.timestamp;
 
         for (uint256 i = 0; i < milestoneDescriptions.length; i++) {
             p.milestones.push(
                 Milestone({
                     description: milestoneDescriptions[i],
-                    amount: milestoneAmounts[i],
+                    amount: treasury.weiToToken(milestoneAmounts[i]),
                     verified: false
                 })
             );
@@ -76,7 +89,7 @@ contract ProposalManager {
         return proposals[proposalId];
     }
 
-    function getAllProjects() external view returns (Proposal[] memory) {
+    function getAllProposals() external view returns (Proposal[] memory) {
         Proposal[] memory all = new Proposal[](nextProposalId - 1);
         for (uint256 i = 1; i < nextProposalId; i++) {
             all[i - 1] = proposals[i];
@@ -98,6 +111,14 @@ contract ProposalManager {
 
         Milestone storage m = proposals[proposalId].milestones[index];
         m.verified = true;
+    }
+
+    function killProposal(uint proposalId) external {
+        Proposal storage p = proposals[proposalId];
+        require(proposalId < nextProposalId && proposalId > 0, "Invalid proposalId");
+        require(p.id != 0, "Already inactive");
+        p.id = 0;
+        emit ProposalKilled(proposalId, p.ngo);
     }
 
 }

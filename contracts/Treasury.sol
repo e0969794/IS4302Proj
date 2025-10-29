@@ -49,7 +49,15 @@ contract Treasury is AccessControl, ReentrancyGuard {
         return (weiAmount/1e18) * mintRate;
     }
 
+    function weiToToken(uint256 weiAmount) external view returns (uint256) {
+        return (weiAmount/1e18) * mintRate;
+    }
+
     function _tokenToWei(uint256 tokenAmount) internal view returns (uint256) {
+        return tokenAmount/mintRate * 1e18;
+    }
+
+    function tokenToWei(uint256 tokenAmount) external view returns (uint256) {
         return tokenAmount/mintRate * 1e18;
     }
 

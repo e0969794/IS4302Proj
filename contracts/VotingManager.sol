@@ -17,8 +17,11 @@ interface IProposalManager {
         uint256 id; //0 means not active (expired/completed)
         address ngo;
         Milestone[] milestones;
+        uint256 creation_date;
     }
     function getProposal(uint256 proposalId) external view returns (Proposal memory);
+    function getAllProposals() external view returns (Proposal[] memory);
+    function killProposal(uint256 proposalId) external;
 }
 
 interface ITreasury {
@@ -114,4 +117,43 @@ contract VotingManager is AccessControl, ReentrancyGuard {
         treasury.disburseMilestoneFunds(ngo, tokenAmount);
     }
 
+    function cleanInvalidProposals() external {
+        IProposalManager.Proposal[] memory ps = proposalManager.getAllProposals();
+        for (uint256 i = 0; i < ps.length; i++) {
+            if (!_isProposalValid(ps[i])) {
+                proposalManager.killProposal(ps[i].id);
+            }
+        }
+    }
+
+    function getValidProposals() external view returns (IProposalManager.Proposal[] memory) {
+        IProposalManager.Proposal[] memory ps = proposalManager.getAllProposals();
+        uint256 count = 0;
+        for (uint256 i = 0; i < ps.length; i++) {
+            if (_isProposalValid(ps[i])) count++;
+        }
+
+        IProposalManager.Proposal[] memory validList = new IProposalManager.Proposal[](count);
+        uint256 index = 0;
+        for (uint256 i = 0; i < ps.length; i++) {
+            if (_isProposalValid(ps[i])) {
+                validList[index] = ps[i];
+                index++;
+            }
+        }
+        return validList;
+    }
+
+
+    function _isProposalValid(IProposalManager.Proposal memory p) internal view returns (bool) {
+        if (p.id == 0) return false; // check if proposal is killed
+
+        // Get milestone index
+        uint256 nextMilestone = nextMilestoneMapping[p.id];
+        if (nextMilestone == 0) nextMilestone = 1;
+
+        uint256 milestoneEndTime = p.creation_date + (nextMilestone * 7 days);
+        // Valid if current block timestamp is greater than unlock time
+        return block.timestamp <= milestoneEndTime;
+    }
 }
