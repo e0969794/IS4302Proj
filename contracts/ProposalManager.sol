@@ -9,6 +9,7 @@ contract ProposalManager {
         string description;
         uint256 amount; //should be cumulative, if milestone 1 is 100, milestone 2 >=101
         bool verified;
+        bytes32 proofHash;
     }
 
     struct Proposal {
@@ -22,6 +23,22 @@ contract ProposalManager {
     // NGO address -> proposalIds
 
     event ProposalCreated(uint256 indexed proposalId, address ngo);
+
+    // Event emitted when a milestone is verified
+    event MilestoneVerified(
+        uint256 indexed proposalId,
+        uint256 indexed milestoneIndex,
+        bytes32 proofHash,
+        string proofURL,
+        address ngo
+    );
+    // Event emitted when a milestone is rejected
+    event MilestoneRejected(
+        uint256 indexed proposalId,
+        uint256 indexed milestoneIndex,
+        address ngo,
+        string reason
+    );
 
     constructor() {
         nextProposalId = 1;
@@ -60,7 +77,8 @@ contract ProposalManager {
                 Milestone({
                     description: milestoneDescriptions[i],
                     amount: milestoneAmounts[i],
-                    verified: false
+                    verified: false,
+                    proofHash: bytes32(0)
                 })
             );
         }
@@ -85,19 +103,62 @@ contract ProposalManager {
     }
 
     /**
-     * @notice Verifies a milestone, callable ONLY by the ProofOracle
-     * @param proposalId ID of the proposal
-     * @param index Index of the milestone
+     * @notice Checks if an address owns a specific proposal
+     * @dev View function used by ProofOracle to enforce ownership during proof submission
+     *      Returns false if proposal doesn't exist or is inactive
+     * @param proposalId ID of the proposal to check
+     * @param ngo Address claiming ownership
+     * @return bool True if ngo is the owner of the proposal, false otherwise
      */
-    function _verifyMilestone(uint256 proposalId, uint256 index)
-        external 
-        onlyProofOracle()
-    {
-        require(proposals[proposalId].id != 0, "Proposal does not exist");
-        require(index < proposals[proposalId].milestones.length, "Invalid milestone index");
+    function isProposalOwner(uint256 proposalId, address ngo)
+        external view returns (bool) {
+        if (proposalId >= nextProposalId) return false;
+        if (proposals[proposalId].id == 0) return false;
 
-        Milestone storage m = proposals[proposalId].milestones[index];
-        m.verified = true;
+        return proposals[proposalId].ngo == ngo;
     }
 
+    /**
+     * @notice Verifies a milestone and marks it as complete with proof
+     * @dev Only callable by the ProofOracle contract (enforced via onlyProofOracle modifier)
+     *      Returns false on any validation failure, emitting a rejection event
+     *      On success: stores keccak256 hash of proofURL and sets verified = true
+     * @param proposalId ID of the target proposal
+     * @param milestoneIndex Index of the milestone within the proposal
+     * @param proofURL Full IPFS URL (e.g., ipfs://Qm...) of the uploaded proof
+     * @return success True if milestone was successfully verified, false otherwise
+     */
+    function verifyMilestone(uint256 proposalId, uint256 milestoneIndex,
+        string calldata proofURL) external onlyProofOracle() returns (bool) {
+        // Check proposal exists
+        if (proposals[proposalId].id == 0) {
+            emit MilestoneRejected(proposalId, milestoneIndex,
+                proposals[proposalId].ngo, "Proposal does not exist");
+            return false;
+        }
+        // Check milestone index
+        if (milestoneIndex >= proposals[proposalId].milestones.length) {
+            emit MilestoneRejected(proposalId, milestoneIndex,
+                proposals[proposalId].ngo, "Invalid milestone index");
+            return false;
+        }
+        // Check if already verified
+        if (proposals[proposalId].milestones[milestoneIndex].verified) {
+            emit MilestoneRejected(proposalId, milestoneIndex,
+                proposals[proposalId].ngo, "Already verified");
+            return false;
+        }
+
+        // Hash the full proof URL for immutability and gas-efficient storage
+        bytes32 proofHash = keccak256(abi.encodePacked(proofURL));
+
+        Milestone storage m = proposals[proposalId].milestones[milestoneIndex];
+        m.proofHash = proofHash;
+        m.verified = true;
+
+        emit MilestoneVerified(proposalId, milestoneIndex, proofHash,
+            proofURL, proposals[proposalId].ngo);
+
+        return true;
+    }
 }
