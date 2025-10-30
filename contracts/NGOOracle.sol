@@ -15,10 +15,10 @@ contract NGOOracle is AccessControl {
     // JSON format:
     // {"ngos":[{"address":"0xNGO1",
     // "name":"NGO1","description":"Charity","registrationId":"123"},...]}
-    string public ngoDetailsUrl;
+    string public ngoDetailsURL;
 
     // Event emitted when the NGO whitelist is updated with a new IPFS JSON URL
-    event NGOWhitelistUpdated(string ipfsUrl, uint256 timestamp);
+    event NGOWhitelistUpdated(string ipfsURL, uint256 timestamp);
     // Event emitted when an NGO is approved during initialization
     event NGOApproved(address indexed ngo, uint256 timestamp);
     // Event emitted when an NGO is verified as approved
@@ -26,20 +26,17 @@ contract NGOOracle is AccessControl {
     // Event emitted when an NGO is rejected (not approved)
     event NGORejected(address indexed ngo, uint256 timestamp);
 
-    // Event emitted when ORACLE_ADMIN is transferred
-    event AdminRoleTransferred(address indexed oldAdmin, address indexed newAdmin);
-
     /**
      * @notice Initializes the NGOOracle with a list of approved NGOs
-     * @dev Expects ipfsUrl to point to a JSON file on IPFS
+     * @dev Expects ipfsURL to point to a JSON file on IPFS
      *      Uploaded by the DAO admin via Pinata
      * @param ngoAddresses Array of NGO addresses to approve
-     * @param ipfsUrl IPFS URL pointing to the JSON file with NGO details
+     * @param ipfsURL IPFS URL pointing to the JSON file with NGO details
      */
-    constructor(address[] memory ngoAddresses, string memory ipfsUrl) {
+    constructor(address[] memory ngoAddresses, string memory ipfsURL) {
         // Validate inputs
-        require(bytes(ipfsUrl).length > 0, "Empty IPFS URL");
-        require(isValidIPFSURL(ipfsUrl), "Invalid IPFS URL format");
+        require(bytes(ipfsURL).length > 0, "Empty IPFS URL");
+        require(isValidIPFSURL(ipfsURL), "Invalid IPFS URL format");
         for (uint256 i = 0; i < ngoAddresses.length; i++) {
             require(ngoAddresses[i] != address(0), "Invalid NGO address");
         }
@@ -53,8 +50,8 @@ contract NGOOracle is AccessControl {
             approvedNGOs[ngoAddresses[i]] = true;
             emit NGOApproved(ngoAddresses[i], block.timestamp);
         }
-        ngoDetailsUrl = ipfsUrl;
-        emit NGOWhitelistUpdated(ipfsUrl, block.timestamp);
+        ngoDetailsURL = ipfsURL;
+        emit NGOWhitelistUpdated(ipfsURL, block.timestamp);
     }
 
     /**
@@ -97,18 +94,18 @@ contract NGOOracle is AccessControl {
      * @dev Only callable by ORACLE_ADMIN (recommended: multi-sig wallet)
      *      Admin must upload a new JSON file to Pinata including the new NGO
      * @param ngo Address of the NGO to approve
-     * @param ipfsUrl New IPFS URL for the updated JSON file
+     * @param ipfsURL New IPFS URL for the updated JSON file
      */
-    function approveNGO(address ngo, string memory ipfsUrl) external onlyRole(ORACLE_ADMIN) {
+    function approveNGO(address ngo, string memory ipfsURL) external onlyRole(ORACLE_ADMIN) {
         require(ngo != address(0), "Invalid NGO address");
         require(!approvedNGOs[ngo], "NGO already approved");
-        require(bytes(ipfsUrl).length > 0, "Empty IPFS URL");
-        require(isValidIPFSURL(ipfsUrl), "Invalid IPFS URL format");
+        require(bytes(ipfsURL).length > 0, "Empty IPFS URL");
+        require(isValidIPFSURL(ipfsURL), "Invalid IPFS URL format");
 
         approvedNGOs[ngo] = true;
-        ngoDetailsUrl = ipfsUrl;
+        ngoDetailsURL = ipfsURL;
         emit NGOApproved(ngo, block.timestamp);
-        emit NGOWhitelistUpdated(ipfsUrl, block.timestamp);
+        emit NGOWhitelistUpdated(ipfsURL, block.timestamp);
     }
 
     /**
@@ -116,51 +113,38 @@ contract NGOOracle is AccessControl {
      * @dev Only callable by ORACLE_ADMIN (recommended: multi-sig wallet)
      *      Admin must upload a new JSON file to Pinata excluding the revoked NGO
      * @param ngo Address of the NGO to revoke
-     * @param ipfsUrl New IPFS URL for the updated JSON file
+     * @param ipfsURL New IPFS URL for the updated JSON file
      */
-    function revokeNGO(address ngo, string memory ipfsUrl) external onlyRole(ORACLE_ADMIN) {
+    function revokeNGO(address ngo, string memory ipfsURL) external onlyRole(ORACLE_ADMIN) {
         require(ngo != address(0), "Invalid NGO address");
         require(approvedNGOs[ngo], "NGO not approved");
-        require(bytes(ipfsUrl).length > 0, "Empty IPFS URL");
-        require(isValidIPFSURL(ipfsUrl), "Invalid IPFS URL format");
+        require(bytes(ipfsURL).length > 0, "Empty IPFS URL");
+        require(isValidIPFSURL(ipfsURL), "Invalid IPFS URL format");
 
         approvedNGOs[ngo] = false;
-        ngoDetailsUrl = ipfsUrl;
+        ngoDetailsURL = ipfsURL;
         emit NGORejected(ngo, block.timestamp);
-        emit NGOWhitelistUpdated(ipfsUrl, block.timestamp);
+        emit NGOWhitelistUpdated(ipfsURL, block.timestamp);
     }
 
     /**
      * @notice Updates the IPFS JSON URL without changing approvals
      * @dev Only callable by ORACLE_ADMIN (recommended: multi-sig wallet)
      *      Useful for updating NGO details without changing the whitelist
-     * @param ipfsUrl New IPFS URL for the JSON file
+     * @param ipfsURL New IPFS URL for the JSON file
      */
-    function updateNGODetailsUrl(string memory ipfsUrl) external onlyRole(ORACLE_ADMIN) {
-        require(bytes(ipfsUrl).length > 0, "Empty IPFS URL");
-        require(isValidIPFSURL(ipfsUrl), "Invalid IPFS URL format");
-        ngoDetailsUrl = ipfsUrl;
-        emit NGOWhitelistUpdated(ipfsUrl, block.timestamp);
+    function updateNGODetailsURL(string memory ipfsURL) external onlyRole(ORACLE_ADMIN) {
+        require(bytes(ipfsURL).length > 0, "Empty IPFS URL");
+        require(isValidIPFSURL(ipfsURL), "Invalid IPFS URL format");
+        ngoDetailsURL = ipfsURL;
+        emit NGOWhitelistUpdated(ipfsURL, block.timestamp);
     }
 
     /**
      * @notice Retrieves the IPFS URL for the JSON file containing all NGO details
      * @return The IPFS URL (e.g., ipfs://<CID>)
      */
-    function getNGODetailsUrl() external view returns (string memory) {
-        return ngoDetailsUrl;
-    }
-
-    /**
-     * @notice Transfers ORACLE_ADMIN role to a multi-sig wallet
-     * @dev Only callable by DEFAULT_ADMIN_ROLE
-     * @param newAdmin Address of the multi-sig wallet
-     */
-    function transferAdminRole(address newAdmin) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(newAdmin != address(0), "Invalid admin address");
-        _grantRole(ORACLE_ADMIN, newAdmin);
-        _revokeRole(ORACLE_ADMIN, msg.sender);
-        _revokeRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _grantRole(DEFAULT_ADMIN_ROLE, newAdmin);
+    function getNGODetailsURL() external view returns (string memory) {
+        return ngoDetailsURL;
     }
 }
