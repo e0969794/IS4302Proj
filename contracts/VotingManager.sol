@@ -96,15 +96,18 @@ contract VotingManager is AccessControl, ReentrancyGuard {
         uint256 previousVotes = userVotes[proposalId][msg.sender];
         uint256 totalVotes = previousVotes + newVotes;
 
+        // Convert votes to wei for token calculation (1 vote = 1 wei of GOV tokens)
         uint256 tokensRequired = totalVotes * totalVotes - previousVotes * previousVotes;
+        // Scale up to actual token amount (1 vote costs 1 GOV token in wei)
+        tokensRequired = tokensRequired * 1e18;
 
         require(treasury.getTokenBalance(msg.sender) >= tokensRequired, "Insufficient credits");
 
         treasury.burnETH(msg.sender, tokensRequired);
 
         userVotes[proposalId][msg.sender] = totalVotes;
-        //dont need to check if it doesnt exist because by default it is 0
-        proposalVotesMapping[proposalId] += newVotes;
+        // Convert votes to wei for consistency with milestone amounts
+        proposalVotesMapping[proposalId] += newVotes * 1e18;
         emit VoteCast(msg.sender, proposalId, voteId, newVotes);
         _processProposal(proposalId);
     }   
