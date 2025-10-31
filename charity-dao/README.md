@@ -144,7 +144,7 @@ npm run dev
     ```javascript
     const { ethers } = require("hardhat");
     const treasury = await ethers.getContractAt("Treasury", "NEW_TREASURY_ADDRESS");
-    console.log(await treasury.getAllProposals());
+    console.log(await proposalManager.getAllProjects());
     ```
   - Check `nextProposalId`: `console.log(await treasury.nextProposalId())`.
 - **Approval Fails**:

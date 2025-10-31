@@ -51,11 +51,11 @@ async function main() {
     );
     await treasury.waitForDeployment();
 
-    // Grant MINTER_ROLE to Treasury
-    console.log("Granting MINTER_ROLE to Treasury...");
-    const MINTER_ROLE = await governanceToken.MINTER_ROLE();
-    await governanceToken.connect(deployer).grantRole(MINTER_ROLE, await treasury.getAddress());
-    console.log("MINTER_ROLE granted to Treasury");
+    // Grant TREASURY_ROLE to Treasury
+    console.log("Granting TREASURY_ROLE to Treasury...");
+    const TREASURY_ROLE = await governanceToken.TREASURY_ROLE();
+    await governanceToken.connect(deployer).grantRole(TREASURY_ROLE, await treasury.getAddress());
+    console.log("TREASURY_ROLE granted to Treasury");
 
     // Generate random NGO wallets
     console.log(`Generating ${numNGOs} NGO wallets...`);
@@ -88,19 +88,53 @@ async function main() {
     const ngoOracle = await NGOOracle.deploy(ngoAddresses, ngoDetails.slice(0, numNGOs));
     await ngoOracle.waitForDeployment();
 
+    // Deploy ProposalManager
+    console.log("Deploying ProposalManager...");
+    const ProposalManager = await ethers.getContractFactory("ProposalManager");
+    const proposalManager = await ProposalManager.deploy();
+    await proposalManager.waitForDeployment();
+
+    // Deploy VotingManager
+    console.log("Deploying VotingManager...");
+    const VotingManager = await ethers.getContractFactory("VotingManager");
+    const votingManager = await VotingManager.deploy(
+        deployer.address, // Admin address
+        await proposalManager.getAddress(), // ProposalManager address
+        await treasury.getAddress() // Treasury address
+    );
+    await votingManager.waitForDeployment();
+
+    // Grant BURNER_ROLE to VotingManager so it can burn tokens when users vote
+    console.log("Granting BURNER_ROLE to VotingManager...");
+    const BURNER_ROLE = await treasury.BURNER_ROLE();
+    await treasury.connect(deployer).grantRole(BURNER_ROLE, await votingManager.getAddress());
+    console.log("BURNER_ROLE granted to VotingManager");
+
+    // Grant DISBURSER_ROLE to VotingManager so it can disburse milestone funds
+    console.log("Granting DISBURSER_ROLE to VotingManager...");
+    const DISBURSER_ROLE = await treasury.DISBURSER_ROLE();
+    await treasury.connect(deployer).grantRole(DISBURSER_ROLE, await votingManager.getAddress());
+    console.log("DISBURSER_ROLE granted to VotingManager");
+
     // Verify setup
     console.log("Verifying setup...");
-    const isMinter = await governanceToken.hasRole(MINTER_ROLE, await treasury.getAddress());
+    const isMinter = await governanceToken.hasRole(TREASURY_ROLE, await treasury.getAddress());
     const isAdmin = await governanceToken.hasRole(await governanceToken.DEFAULT_ADMIN_ROLE(), await deployer.getAddress());
-    const treasuryAdmin = await treasury.hasRole(await treasury.DAO_ADMIN(), deployer.address);
-    console.log("Treasury has MINTER_ROLE:", isMinter);
+    const treasuryAdmin = await treasury.hasRole(await treasury.DEFAULT_ADMIN_ROLE(), deployer.address);
+    const isBurner = await treasury.hasRole(BURNER_ROLE, await votingManager.getAddress());
+    const isDisburser = await treasury.hasRole(DISBURSER_ROLE, await votingManager.getAddress());
+    console.log("Treasury has TREASURY_ROLE:", isMinter);
     console.log("Deployer is GovernanceToken admin:", isAdmin);
     console.log("Deployer is Treasury admin:", treasuryAdmin);
+    console.log("VotingManager has BURNER_ROLE:", isBurner);
+    console.log("VotingManager has DISBURSER_ROLE:", isDisburser);
 
     console.log("All contracts deployed successfully.");
     console.log("GovToken:", await governanceToken.getAddress());
     console.log("Treasury:", await treasury.getAddress());
     console.log("NGO Oracle:", await ngoOracle.getAddress());
+    console.log("ProposalManager:", await proposalManager.getAddress());
+    console.log("VotingManager:", await votingManager.getAddress());
     console.log("NGO Wallets:");
     ngoWallets.forEach((wallet, index) => {
         console.log(`NGO ${index + 1}: Address=${wallet.address}, Private Key=${wallet.privateKey}, Balance=${ethers.formatEther(ethToSend)} ETH`);
@@ -111,6 +145,8 @@ async function main() {
         VITE_GOVTOKEN_ADDRESS: await governanceToken.getAddress(),
         VITE_TREASURY_ADDRESS: await treasury.getAddress(),
         VITE_NGO_ORACLE_ADDRESS: await ngoOracle.getAddress(),
+        VITE_PROPOSAL_MANAGER_ADDRESS: await proposalManager.getAddress(),
+        VITE_VOTING_MANAGER_ADDRESS: await votingManager.getAddress(),
     });
 }
 

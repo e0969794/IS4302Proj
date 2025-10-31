@@ -2,12 +2,15 @@ import { ethers } from "ethers";
 import GovernanceTokenArtifact from "../../../artifacts/contracts/GovernanceToken.sol/GovernanceToken.json";
 import TreasuryArtifact from "../../../artifacts/contracts/Treasury.sol/Treasury.json";
 import NGOOracleArtifact from "../../../artifacts/contracts/NGOOracle.sol/NGOOracle.json";
-import ProposalArtifact from "../../../artifacts/contracts/Proposal.sol/Proposal.json";
+import ProposalArtifact from "../../../artifacts/contracts/ProposalManager.sol/ProposalManager.json";
+import VotingManagerArtifact from "../../../artifacts/contracts/VotingManager.sol/VotingManager.json";
 
 const CONTRACT_ADDRESSES = {
   GovernanceToken: import.meta.env.VITE_GOVTOKEN_ADDRESS,
   Treasury: import.meta.env.VITE_TREASURY_ADDRESS,
   NGOOracle: import.meta.env.VITE_NGO_ORACLE_ADDRESS,
+  ProposalManager: import.meta.env.VITE_PROPOSAL_MANAGER_ADDRESS,
+  VotingManager: import.meta.env.VITE_VOTING_MANAGER_ADDRESS,
 };
 
 export async function getContracts() {
@@ -38,8 +41,18 @@ export async function getContracts() {
     NGOOracleArtifact.abi,
     signer || provider
   );
+  const proposalManager = new ethers.Contract(
+    CONTRACT_ADDRESSES.ProposalManager,
+    ProposalArtifact.abi,
+    signer || provider
+  );
+  const votingManager = new ethers.Contract(
+    CONTRACT_ADDRESSES.VotingManager,
+    VotingManagerArtifact.abi,
+    signer || provider
+  );
 
-  return { governanceToken, treasury, ngoOracle, provider, signer };
+  return { governanceToken, treasury, ngoOracle, proposalManager, votingManager, provider, signer };
 }
 
 export function getProposalContract(proposalAddress, signer) {
