@@ -3,9 +3,10 @@ pragma solidity ^0.8.24;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
-// Interface to interact with the ProposalManager contract
 interface IProposalManager {
-    function _verifyMilestone(uint256 proposalId, uint256 index) external;
+    function verifyMilestone(uint256 proposalId, uint256 milestoneIndex,
+        string calldata proofURL) external returns (bool);
+    function isProposalOwner(uint256 proposalId, address ngo) external view returns (bool);
 }
 
 interface INGOOracle {
@@ -15,26 +16,43 @@ interface INGOOracle {
 // ProofOracle contract for verifying milestones using IPFS proofs uploaded via Pinata
 contract ProofOracle is AccessControl {
     // Admin who can approve/revoke NGOs and set IPFS URLs
-    // Assign to a multi-sig wallet (e.g. Gnosis Safe) for decentralized control
     bytes32 public constant ORACLE_ADMIN = keccak256("ORACLE_ADMIN");
 
-    // Reference to the ProposalManager contract
-    IProposalManager public proposalManager;
-
-    // Reference to the NGOOracle contract
+    // Immutable references to core contracts
+    IProposalManager public immutable proposalManager;
     INGOOracle public immutable ngoOracle;
 
-    // Event emitted when a milestone is verified
-    event MilestoneVerified(
+    // Represents a proof submission in the verification queue
+    struct ProofSubmission {
+        uint256 proposalId;
+        uint256 milestoneIndex;
+        string proofURL;
+        address ngo;
+        uint256 submittedAt;
+        bool processed;
+        bool approved;
+        string reason;
+    }
+
+    // Mapping of submission ID → proof data
+    mapping(uint256 => ProofSubmission) public proofs;
+    // Counter for generating next submission IDs (starts at 0)
+    uint256 public proofCount;
+
+    // Emitted when an NGO submits a new proof
+    event ProofSubmitted(
+        uint256 indexed id,
         uint256 indexed proposalId,
-        uint256 indexed milestoneIndex,
-        bytes32 proofHash,
-        string proofURL,
-        address ngo
+        uint256 milestoneIndex,
+        address indexed ngo
     );
 
-    // Event emitted when ORACLE_ADMIN is transferred
-    event AdminRoleTransferred(address indexed oldAdmin, address indexed newAdmin);
+    // Emitted when admin records its decision
+    event ProofAprroved(
+        uint256 indexed submissionId,
+        bool approved,
+        string reason
+    );
 
     /**
      * @notice Initializes the ProofOracle with ProposalManager and NGOOracle addresses
@@ -48,7 +66,7 @@ contract ProofOracle is AccessControl {
         proposalManager = IProposalManager(_proposalManager);
         ngoOracle = INGOOracle(_ngoOracle);
 
-        // Temporary grant admin role to deployer (transfer to multi-sig post-deployment)
+        // Temporary grant admin role to deployer (transfer to multi-sig in future works)
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(ORACLE_ADMIN, msg.sender);
     }
@@ -72,52 +90,92 @@ contract ProofOracle is AccessControl {
     }
 
     /**
-     * @notice Verifies a milestone by hashing the full IPFS URL and calling ProposalManager
-     * @dev Only callable by ORACLE_ADMIN and checks NGO approval
+     * @notice NGO submits a proof for milestone verification via frontend
+     * @dev Only the NGO that owns the proposal can submit proof
      * @param proposalId ID of the proposal
      * @param milestoneIndex Index of the milestone
      * @param proofURL Full IPFS URL (e.g. ipfs://<CID>) of the milestone proof
-     * @param ngo Address of the NGO
      */
-    function verifyMilestone(
-        uint256 proposalId,
-        uint256 milestoneIndex,
-        string memory proofURL,
-        address ngo
-    ) external onlyRole(ORACLE_ADMIN) {
-        // Validate inputs
-        require(bytes(proofURL).length > 0, "Proof URL cannot be empty");
-        require(isValidIPFSURL(proofURL), "Invalid IPFS URL format");
-        require(ngo != address(0), "Invalid NGO address");
+    function submitProof(uint256 proposalId, uint256 milestoneIndex,
+        string calldata proofURL) external
+        returns (uint256) {
+        require(bytes(proofURL).length > 0, "Empty URL");
+        require(isValidIPFSURL(proofURL), "Invalid IPFS URL");
+        require(ngoOracle.verifyNGO(msg.sender), "NGO not approved");
+        require(
+            proposalManager.isProposalOwner(proposalId, msg.sender),
+            "NGO does not own this proposal"
+        );
 
-        // Verify NGO is approved if ngoOracle is set
-        if (address(ngoOracle) != address(0)) {
-            require(ngoOracle.verifyNGO(ngo), "NGO not approved");
-        }
+        uint256 submissionId = proofCount++;
+        proofs[submissionId] = ProofSubmission({
+            proposalId: proposalId,
+            milestoneIndex: milestoneIndex,
+            proofURL: proofURL,
+            ngo: msg.sender,
+            submittedAt: block.timestamp,
+            processed: false,
+            approved: false,
+            reason: ""
+        });
+
+        emit ProofSubmitted(submissionId, proposalId, milestoneIndex, msg.sender);
+
+        return submissionId;
+    }
+
+     /**
+     * @notice Verifies a milestone by hashing the full IPFS URL and calling ProposalManager
+     * @dev Only ORACLE_ADMIN can call
+     *      If approved, calls ProposalManager to verify milestone
+     * @param submissionId ID of the submission to process
+     * @param approved Admin's decision on proof validity
+     * @param reason Human-readable explanation
+     */
+    function verifyProof(uint256 submissionId, bool approved, string calldata reason)
+        external onlyRole(ORACLE_ADMIN) {
+        ProofSubmission storage sub = proofs[submissionId];
+        require(sub.submittedAt != 0, "Not found");
+        require(!sub.processed, "Processed");
+
+        // Save approval and reason
+        sub.approved = approved;
+        sub.reason = reason;
+
+        emit ProofAprroved(submissionId, approved, reason);
         
-        // Hash the full proof URL for immutability and gas-efficient storage
-        bytes32 proofHash = keccak256(abi.encodePacked(proofURL));
+        if (approved) {
+            // Call ProposalManager to verify the milestone
+            bool success = proposalManager.verifyMilestone(
+                sub.proposalId,
+                sub.milestoneIndex,
+                sub.proofURL
+            );
 
-        // Call ProposalManager to verify the milestone
-        try proposalManager._verifyMilestone(proposalId, milestoneIndex) {
-            // Emit event with proofHash and proofURL for DAO transparency
-            emit MilestoneVerified(proposalId, milestoneIndex, proofHash, proofURL, ngo);
-        } catch {
-            revert("Failed to verify milestone in ProposalManager");
+            sub.processed = success;
+        } else {
+            // Admin rejected
+            sub.processed = true;
         }
     }
 
-    // /**
-    //  * @notice Transfers ORACLE_ADMIN role to a multi-sig wallet
-    //  * @dev Only callable by DEFAULT_ADMIN_ROLE
-    //  * @param newAdmin Address of the multi-sig wallet
-    //  */
-    // function transferAdminRole(address newAdmin) external onlyRole(DEFAULT_ADMIN_ROLE) {
-    //     require(newAdmin != address(0), "Invalid admin address");
-    //     _grantRole(ORACLE_ADMIN, newAdmin);
-    //     _revokeRole(ORACLE_ADMIN, msg.sender);
-    //     _revokeRole(DEFAULT_ADMIN_ROLE, msg.sender);
-    //     _grantRole(DEFAULT_ADMIN_ROLE, newAdmin);
-    //     emit AdminRoleTransferred(msg.sender, newAdmin);
-    // }
+    /**
+     * @notice Returns full details of a submission
+     * @param submissionId ID to query
+     * @return ProofSubmission struct
+     */
+    function getSubmission(uint256 submissionId) external view
+        returns (ProofSubmission memory) {
+        return proofs[submissionId];
+    }
+
+    /**
+     * @notice Counts pending (unprocessed) submissions
+     * @return count Number of submissions awaiting verification
+     */
+    function pendingCount() external view returns (uint256 count) {
+        for (uint256 i = 0; i < proofCount; i++) {
+            if (!proofs[i].processed) count++;
+        }
+    }
 }
