@@ -100,7 +100,7 @@ describe("CharityDAO Contracts - Oracles", function () {
 
         // Deploy ProposalManager
         ProposalManager = await ethers.getContractFactory("ProposalManager");
-        proposalManager = await ProposalManager.deploy(treasury.target);
+        proposalManager = await ProposalManager.deploy();
         await proposalManager.waitForDeployment();
 
         // Deploy ProofOracle

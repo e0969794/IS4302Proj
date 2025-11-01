@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+//import "hardhat/console.sol";
+
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
@@ -22,6 +24,7 @@ interface IProposalManager {
     function getProposal(uint256 proposalId) external view returns (Proposal memory);
     function getAllProposals() external view returns (Proposal[] memory);
     function killProposal(uint256 proposalId) external;
+    function proposalExists(uint256 proposalId) external view returns (bool);
 }
 
 interface ITreasury {
@@ -58,8 +61,7 @@ contract VotingManager is AccessControl, ReentrancyGuard {
         return proposalVotesMapping[proposalId];
     }
 
-    //called by anyone or called by vote function
-    function _processProposal(uint256 proposalId) internal {
+    function _updatProposalAfterVote(uint256 proposalId) internal {
         uint256 currVotes = proposalVotesMapping[proposalId];
         IProposalManager.Proposal memory p = proposalManager.getProposal(proposalId);
         uint nextMilestone = nextMilestoneMapping[proposalId];
@@ -80,6 +82,8 @@ contract VotingManager is AccessControl, ReentrancyGuard {
     }
 
     function getNextMilestone(uint256 proposalId, uint256 currVotes) external view returns (uint) {
+
+        require(_isProposalValid(proposalId), "proposal not valid");
         IProposalManager.Proposal memory p = proposalManager.getProposal(proposalId);
 
         uint currIndex = 0;
@@ -109,7 +113,7 @@ contract VotingManager is AccessControl, ReentrancyGuard {
         //dont need to check if it doesnt exist because by default it is 0
         proposalVotesMapping[proposalId] += newVotes;
         emit VoteCast(msg.sender, proposalId, voteId, newVotes);
-        _processProposal(proposalId);
+        _updatProposalAfterVote(proposalId);
     }   
 
 
@@ -118,42 +122,55 @@ contract VotingManager is AccessControl, ReentrancyGuard {
     }
 
     function cleanInvalidProposals() external {
-        IProposalManager.Proposal[] memory ps = proposalManager.getAllProposals();
+        uint256[] memory ps = _getValidProposals();
         for (uint256 i = 0; i < ps.length; i++) {
-            if (!_isProposalValid(ps[i])) {
-                proposalManager.killProposal(ps[i].id);
+            // Get milestone index
+            uint256 nextMilestone = nextMilestoneMapping[ps[i]];
+            if (nextMilestone == 0) nextMilestone = 1;
+
+            IProposalManager.Proposal memory p = proposalManager.getProposal(ps[i]);
+
+            uint256 sevenDaysLater = p.creation_date + (nextMilestone * 7 days);
+
+            // Calculate end of that day (23:59:59 UTC)
+            uint256 endOfDay = (sevenDaysLater / 1 days + 1) * 1 days - 1;
+
+            if (block.timestamp > endOfDay) {
+                proposalManager.killProposal(ps[i]);
             }
         }
     }
 
-    function getValidProposals() external view returns (IProposalManager.Proposal[] memory) {
+    function getValidProposals() external view returns (uint256[] memory){
+        return _getValidProposals();
+    }
+
+    function _getValidProposals() internal view returns (uint256[] memory) {
         IProposalManager.Proposal[] memory ps = proposalManager.getAllProposals();
+        
+        // First pass: count valid proposals
         uint256 count = 0;
         for (uint256 i = 0; i < ps.length; i++) {
-            if (_isProposalValid(ps[i])) count++;
+            if (ps[i].id != 0) {
+                count++;
+            }
         }
-
-        IProposalManager.Proposal[] memory validList = new IProposalManager.Proposal[](count);
+        
+        // Second pass: fill array with valid proposal indices
+        uint256[] memory validProposalIndexes = new uint256[](count);
         uint256 index = 0;
         for (uint256 i = 0; i < ps.length; i++) {
-            if (_isProposalValid(ps[i])) {
-                validList[index] = ps[i];
+
+            if (ps[i].id != 0) {
+                validProposalIndexes[index] = ps[i].id;
                 index++;
             }
         }
-        return validList;
+        return validProposalIndexes;
     }
 
 
-    function _isProposalValid(IProposalManager.Proposal memory p) internal view returns (bool) {
-        if (p.id == 0) return false; // check if proposal is killed
-
-        // Get milestone index
-        uint256 nextMilestone = nextMilestoneMapping[p.id];
-        if (nextMilestone == 0) nextMilestone = 1;
-
-        uint256 milestoneEndTime = p.creation_date + (nextMilestone * 7 days);
-        // Valid if current block timestamp is greater than unlock time
-        return block.timestamp <= milestoneEndTime;
+    function _isProposalValid(uint256 id) internal view returns (bool) {
+        return (proposalManager.proposalExists(id));
     }
 }
