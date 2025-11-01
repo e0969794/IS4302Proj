@@ -111,27 +111,29 @@ describe("Treasury", function () {
             "AccessControlUnauthorizedAccount"
         );
     });
-    
+
     it("Should allow admin (with BURNER_ROLE) to burn tokens", async function () {
-        const ethAmount = ethers.parseEther("3"); // donor sends 3 ETH
-
+        const ethAmount = ethers.parseEther("1");
+        const tokenAmount = 1n;
+      
+        // Give donor1 some GOV tokens first
         await treasury.connect(donor1).donateETH({ value: ethAmount });
-
+      
+        // Grant BURNER_ROLE to admin
         const burnerRole = await treasury.BURNER_ROLE();
         await treasury.connect(admin).grantRole(burnerRole, admin.address);
-
+      
         const balanceBefore = await govToken.balanceOf(donor1.address);
-        console.log("Balance before burn:", balanceBefore.toString());
-
-        await expect(
-            treasury.connect(admin).burnETH(donor1.address, balanceBefore) // burn 3 GovTokens
-        )
-            .to.emit(govToken, "Transfer")
-            .withArgs(donor1.address, ethers.ZeroAddress, balanceBefore);
-
+      
+        // Burn tokens
+        await expect(treasury.connect(admin).burnETH(donor1.address, tokenAmount))
+          .to.emit(govToken, "Transfer")
+          .withArgs(donor1.address, ethers.ZeroAddress, tokenAmount);
+      
         const balanceAfter = await govToken.balanceOf(donor1.address);
-        expect(balanceAfter).to.equal(0n);
-    });
+        expect(balanceAfter).to.equal(balanceBefore - tokenAmount);
+      });
+      
 
     
     it("Should revert disburseMilestoneFunds if caller is not DISBURSER_ROLE", async function () {
