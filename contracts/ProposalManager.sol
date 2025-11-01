@@ -1,14 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-interface ITreasury {
-    function weiToToken(uint256 weiAmount) external view returns (uint256);
-    function tokenToWei(uint256 tokenAmount) external view returns (uint256);
-}
-
-
 contract ProposalManager {
-    ITreasury public treasury;
 
     address public proofOracle;
     uint256 public nextProposalId;
@@ -34,9 +27,8 @@ contract ProposalManager {
     event ProposalKilled(uint256 indexed proposalId, address ngo);
 
 
-    constructor(address _treasuryAddress) {
+    constructor() {
         nextProposalId = 1;
-        treasury = ITreasury(_treasuryAddress);
     }
 
     modifier onlyProofOracle() {
@@ -72,7 +64,7 @@ contract ProposalManager {
             p.milestones.push(
                 Milestone({
                     description: milestoneDescriptions[i],
-                    amount: treasury.weiToToken(milestoneAmounts[i]),
+                    amount: milestoneAmounts[i],
                     verified: false
                 })
             );
