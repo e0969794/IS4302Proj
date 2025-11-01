@@ -112,11 +112,22 @@ function CreateProposal() {
               type="number"
               step="0.01"
               value={totalFunds}
-              onChange={(e) => setTotalFunds(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === "" || (parseFloat(val) > 0 && !isNaN(val))) {
+                  setTotalFunds(val);
+                }
+              }}
+              onPaste={(e) => {
+                const pasted = e.clipboardData.getData('text');
+                if (pasted.startsWith('-') || isNaN(pasted) || parseFloat(pasted) <= 0) {
+                  e.preventDefault();
+                }
+              }}
               placeholder="10.0"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-colors duration-200"
+              className="w-full pl-4 pr-16 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-colors duration-200"
             />
-            <span className="absolute right-3 top-3 text-gray-500 text-sm">ETH</span>
+            <span className="absolute right-3 top-3 text-gray-500 text-sm pointer-events-none">ETH</span>
           </div>
         </div>
 
@@ -136,19 +147,33 @@ function CreateProposal() {
           
           <div className="space-y-4">
             {milestones.map((milestone, index) => (
-              <div key={index} className="p-4 border border-gray-200 rounded-lg bg-gray-50">
-                <div className="flex items-center mb-3">
+              <div key={index} className="p-4 border border-gray-200 rounded-lg bg-gray-50 relative">
+                    {/* Delete Button - only show if more than 1 milestone */}
+                    {milestones.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newMilestones = milestones.filter((_, i) => i !== index);
+                          setMilestones(newMilestones);
+                        }}
+                        className="absolute top-2 right-2 text-red-500 hover:text-red-700 text-sm font-medium flex items-center space-x-1 transition-colors"
+                      >
+                        <span className="mr-1">×</span> Delete
+                      </button>
+                    )}
+                
+                <div className="flex items-center mb-3 space-x-2 pr-8">
+                  <span className="text-sm font-medium text-gray-800">Milestone</span>
                   <span className="w-6 h-6 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center text-sm font-medium mr-3">
                     {index + 1}
                   </span>
-                  <span className="text-sm font-medium text-gray-700">Milestone {index + 1}</span>
                 </div>
                 <div className="space-y-3">
                   <input
                     type="text"
                     value={milestone.description}
                     onChange={(e) => handleMilestoneChange(index, "description", e.target.value)}
-                    placeholder="Describe this milestone (e.g., 'Purchase medical supplies')"
+                    placeholder="Describe this milestone (e.g. 'Purchase medical supplies')"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   />
                   <div className="relative">
@@ -156,16 +181,33 @@ function CreateProposal() {
                       type="number"
                       step="0.01"
                       value={milestone.amount}
-                      onChange={(e) => handleMilestoneChange(index, "amount", e.target.value)}
+                      onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "" || (parseFloat(val) > 0 && !isNaN(val))) {
+                          handleMilestoneChange(index, "amount", val);
+                        }
+                      }}
+                      onPaste={(e) => {
+                        const pasted = e.clipboardData.getData('text');
+                        if (pasted.startsWith('-') || isNaN(pasted) || parseFloat(pasted) <= 0) {
+                          e.preventDefault();
+                        }
+                      }}
                       placeholder="Cumulative amount needed (ETH)"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      className="w-full pl-3 pr-14 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     />
-                    <span className="absolute right-3 top-2 text-gray-500 text-sm">ETH</span>
+                    <span className="absolute right-3 top-2 text-gray-500 text-sm pointer-events-none">ETH</span>
                   </div>
                 </div>
               </div>
             ))}
           </div>
+        </div>
+
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <p className="text-blue-700 text-xs">
+            💡 <strong>Note:</strong> Only verified NGOs can create proposals. Proposals are automatically approved once submitted.
+          </p>
         </div>
         
         <div className="flex space-x-4">
@@ -194,12 +236,6 @@ function CreateProposal() {
             <p className="text-red-600 text-sm">{error}</p>
           </div>
         )}
-        
-        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-          <p className="text-blue-700 text-xs">
-            💡 <strong>Note:</strong> Only verified NGOs can create proposals. Proposals are automatically approved once submitted.
-          </p>
-        </div>
       </div>
     </div>
   );

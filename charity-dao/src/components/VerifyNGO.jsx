@@ -11,11 +11,37 @@ function VerifyNGO() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Function to fetch JSON from IPFS URL
+  const fetchIPFSJson = async (ipfsUrl) => {
+    try {
+      // Convert ipfs:// to https gateway if needed
+      let fetchUrl = ipfsUrl;
+      if (ipfsUrl.startsWith('ipfs://')) {
+        const hash = ipfsUrl.replace('ipfs://', '');
+        fetchUrl = `https://gateway.pinata.cloud/ipfs/${hash}`;
+      }
+      
+      console.log("Fetching JSON from:", fetchUrl);
+      const response = await fetch(fetchUrl);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const jsonData = await response.json();
+      console.log("Fetched JSON data:", jsonData);
+      return jsonData;
+    } catch (err) {
+      console.error("Error fetching IPFS JSON:", err);
+      throw err;
+    }
+  };
+
   const verifyNGO = async (e) => {
     e.preventDefault();
     setError(null);
     setVerificationStatus(null);
-    setDetails("");
+    setDetails(null);
     setLoading(true);
 
     try {
@@ -43,9 +69,52 @@ function VerifyNGO() {
       console.log("Verification result:", isVerified);
       setVerificationStatus(isVerified);
 
-      // Fetch details
-      const ngoDetails = await ngoOracle.ngoDetails(addressToVerify);
-      setDetails(ngoDetails || "No details available");
+      if (isVerified) {
+        // Only fetch details if verified
+        try {
+          const ngoDetailsUrl = await ngoOracle.getNGODetailsURL();
+          console.log("NGO Details URL:", ngoDetailsUrl);
+
+          if (!ngoDetailsUrl || ngoDetailsUrl === "") {
+            setDetails({ valid: false, message: "No details available" });
+            return;
+          }
+
+          const jsonData = await fetchIPFSJson(ngoDetailsUrl);
+
+          // Must have NGOs array
+          if (!jsonData.ngos || !Array.isArray(jsonData.ngos)) {
+            setDetails({ valid: false, message: "Invalid JSON format: missing 'ngos'" });
+            return;
+          }
+
+          // Find NGO with matching address
+          const ngo = jsonData.ngos.find(
+            (item) => item.address && item.address.toLowerCase() === addressToVerify.toLowerCase()
+          );
+
+          if (ngo) {
+            setDetails({
+              valid: true,
+              name: ngo.name || "N/A",
+              description: ngo.description || "N/A",
+              registrationId: ngo.registrationId || "N/A",
+              address: ngo.address,
+            });
+          } else {
+            setDetails({
+              valid: false,
+              message: "NGO not found: No entry matches this address",
+            });
+          }
+        } catch (fetchError) {
+          console.error("Error fetching IPFS details:", fetchError);
+          setDetails({ valid: false, message: "Failed to fetch details from IPFS" });
+        }
+      } else {
+        // Instant feedback — no IPFS
+        setDetails({ valid: false, message: "NGO is not verified on-chain" });
+      }
     } catch (err) {
       console.error("Verification error:", err);
       setError("Failed to verify: " + err.message);
@@ -62,7 +131,7 @@ function VerifyNGO() {
         </div>
         <div>
           <h2 className="text-2xl font-bold text-gray-800">Verify NGO</h2>
-          <p className="text-gray-600 text-sm">Verify NGO addresses to enable proposal creation</p>
+          <p className="text-gray-600 text-sm">Validates whether the address is a verified NGO</p>
         </div>
       </div>
       
@@ -94,7 +163,7 @@ function VerifyNGO() {
           {loading ? (
             <div className="flex items-center justify-center">
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-              Verifying...
+              Loading...
             </div>
           ) : !account ? (
             "Connect Wallet to Verify NGO"
@@ -117,7 +186,17 @@ function VerifyNGO() {
             </span>
           </div>
           {details && (
-            <p className="text-gray-600 text-sm">{details}</p>
+            <div className="mt-3 space-y-1 text-sm">
+              {details.valid ? (
+                <>
+                  <p><strong>Name:</strong> {details.name}</p>
+                  <p><strong>Description:</strong> {details.description}</p>
+                  <p><strong>Reg ID:</strong> {details.registrationId}</p>
+                </>
+              ) : (
+                <p className="text-red-600">{details.message}</p>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -130,7 +209,7 @@ function VerifyNGO() {
       
       <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
         <p className="text-blue-700 text-xs">
-          💡 <strong>Admin Only:</strong> Only admin accounts can verify NGO addresses. Verified NGOs can create funding proposals.
+          💡 <strong>Note:</strong> Only admin accounts can verify NGO addresses. Verified NGOs can create funding proposals.
         </p>
       </div>
     </div>

@@ -16,6 +16,13 @@ export const MilestoneProvider = ({ children }) => {
   // Store milestone completion status: proposalId -> milestoneIndex -> boolean
   const [milestoneCompletion, setMilestoneCompletion] = useState({});
 
+  // Clear all milestone data
+  const resetAllMilestones = () => {
+    console.log("Clearing all milestone data");
+    setMilestoneStatus({});
+    setMilestoneCompletion({});
+  };
+
   // Calculate which milestone is currently reached based on votes
   const getCurrentMilestone = (proposalId, currentVotes, milestones) => {
     return calculateCurrentMilestone(currentVotes, milestones);
@@ -44,7 +51,9 @@ export const MilestoneProvider = ({ children }) => {
 
   // Get milestones that need verification (completed but not verified)
   const getMilestonesNeedingVerification = (proposalId, currentVotes, milestones) => {
-    return utilGetMilestonesNeedingVerification(currentVotes, milestones, milestoneStatus[proposalId] || {});
+    const result = utilGetMilestonesNeedingVerification(currentVotes, milestones, milestoneStatus[proposalId] || {});
+    console.log(`Milestones needing verification for ${proposalId}:`, result);
+    return result;
   };
 
   // Get the next milestone that can be worked on (all previous milestones verified)
@@ -85,7 +94,8 @@ export const MilestoneProvider = ({ children }) => {
     verifyMilestone,
     getMilestonesNeedingVerification,
     getNextAvailableMilestone,
-    resetProposalMilestones
+    resetProposalMilestones,
+    resetAllMilestones
   };
 
   return (

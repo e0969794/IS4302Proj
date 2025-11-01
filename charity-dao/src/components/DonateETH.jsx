@@ -2,11 +2,9 @@ import { useState } from "react";
 import { ethers } from "ethers";
 import { getContracts } from "../utils/contracts";
 import { useWallet } from "../context/WalletContext";
-import { useNGOStatus } from "../context/useNGOStatus";
 
-function DonateETH() {
+function DonateETH({ isNGO, isAdmin, statusLoading }) {
   const { account, updateBalance } = useWallet();
-  const { isNGO, isAdmin, loading: statusLoading } = useNGOStatus();
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -84,14 +82,25 @@ function DonateETH() {
           <div className="relative">
             <input
               id="amount"
-              type="text"
+              type="number"
+              step="0.01"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === "" || (parseFloat(val) > 0 && !isNaN(val))) {
+                  setAmount(val);
+                }
+              }}
+              onPaste={(e) => {
+                const pasted = e.clipboardData.getData('text');
+                if (pasted.startsWith('-') || isNaN(pasted) || parseFloat(pasted) <= 0) {
+                  e.preventDefault();
+                }
+              }}
               placeholder="0.1"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors duration-200"
-              disabled={loading}
+              className="w-full pl-4 pr-16 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors duration-200"
             />
-            <span className="absolute right-3 top-3 text-gray-500 text-sm">ETH</span>
+            <span className="absolute right-3 top-3 text-gray-500 text-sm pointer-events-none">ETH</span>
           </div>
         </div>
         

@@ -2,16 +2,21 @@ import { useEffect, useRef, useState } from "react";
 import { ethers } from "ethers";
 import { getContracts } from "../utils/contracts";
 import { useWallet } from "../context/WalletContext";
+import { useMilestone } from "../context/MilestoneContext";
 
 function WalletConnect() {
   const { account, balance, updateAccount, updateBalance } = useWallet();
+  const { resetAllMilestones } = useMilestone();
   const [error, setError] = useState(null);
   const isConnecting = useRef(false);
 
   const refreshBalance = async (address) => {
     try {
       const { governanceToken } = await getContracts();
-      const balanceWei = await governanceToken.balanceOf(address);
+      const balanceWei = await governanceToken.balanceOf(address).catch(err => {
+        console.error("Contract call failed:", err);
+        return 0n; // Fallback to 0 on failure
+      });
       console.log("Balance refreshed:", balanceWei.toString());
       updateBalance(ethers.formatEther(balanceWei));
     } catch (err) {
@@ -68,17 +73,18 @@ function WalletConnect() {
       updateAccount(address);
 
       await refreshBalance(address);
+      resetAllMilestones(); // Clear milestones on connect
 
       // Listen for MintedOnDonation events
-      const { governanceToken } = await getContracts();
-      governanceToken.on("MintedOnDonation", (to, amount, donationId) => {
-        console.log("MintedOnDonation event:", { to, amount: ethers.formatEther(amount), donationId });
-        if (to.toLowerCase() === address.toLowerCase()) {
-          refreshBalance(address);
-        }
-      });
+      // const { governanceToken } = await getContracts();
+      // governanceToken.on("MintedOnDonation", (to, amount, donationId) => {
+      //   console.log("MintedOnDonation event:", { to, amount: ethers.formatEther(amount), donationId });
+      //   if (to.toLowerCase() === address.toLowerCase()) {
+      //     refreshBalance(address);
+      //   }
+      // });
     } catch (err) {
-      console.error("Connect wallet error:", err);
+      console.error("Connection failed:", err);
       setError("Failed to connect: " + err.message);
     } finally {
       isConnecting.current = false;
@@ -86,8 +92,9 @@ function WalletConnect() {
   };
 
   useEffect(() => {
+    let mounted = true;
     const checkConnection = async () => {
-      if (isConnecting.current) {
+      if (isConnecting.current || !mounted) {
         console.log("Already checking connection, skipping...");
         return;
       }
@@ -97,8 +104,11 @@ function WalletConnect() {
         console.log("Checking existing accounts...");
         const accounts = await window.ethereum.request({ method: "eth_accounts" });
         console.log("Existing accounts:", accounts);
-        if (accounts.length > 0) {
-          await connectWallet();
+        if (accounts.length > 0 && mounted) {
+          const address = accounts[0];
+          updateAccount(address);
+          await refreshBalance(address);
+          resetAllMilestones(); // Clear on initial check
         }
       } catch (err) {
         console.error("Initial connection check failed:", err);
@@ -108,21 +118,36 @@ function WalletConnect() {
       }
     };
 
-    checkConnection();
-
     if (window.ethereum) {
+      checkConnection(); // Run once on mount
+    }
+
+    return () => {
+      mounted = false; // Prevent updates after unmount
+    };
+  }, []);
+
+    useEffect(() => {
+    if (!window.ethereum) return;
+
       const handleAccountsChanged = async (accounts) => {
         console.log("Accounts changed:", accounts);
-        updateAccount(accounts[0] || null);
-        if (accounts[0]) {
-          await connectWallet();
+        if (accounts.length > 0) {
+          updateAccount(accounts[0]);
+          await refreshBalance(accounts[0]);
+          resetAllMilestones();
+        } else {
+          updateAccount(null);
+          updateBalance("0");
         }
       };
 
       const handleChainChanged = (chainId) => {
         console.log("Chain changed:", chainId);
         updateAccount(null);
-        checkConnection();
+        updateBalance("0");
+        setError(null);
+        resetAllMilestones();
       };
 
       window.ethereum.on("accountsChanged", handleAccountsChanged);
@@ -134,8 +159,7 @@ function WalletConnect() {
           window.ethereum.removeListener("chainChanged", handleChainChanged);
         }
       };
-    }
-  }, [updateAccount]);
+  }, []);
 
   return (
     <div className="bg-white border-b border-gray-200 w-full">

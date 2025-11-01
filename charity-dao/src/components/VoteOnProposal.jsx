@@ -7,7 +7,7 @@ import { useMilestone } from "../context/MilestoneContext";
 
 function VoteOnProposal({ proposal, onVoteSuccess, currentVoteCount }) {
   const { account, balance } = useWallet();
-  const { isNGO, isAdmin, loading: statusLoading } = useNGOStatus();
+  const { isNGO, isAdmin, statusLoading } = useNGOStatus();
   const { isVotingBlocked, getCurrentMilestone, getMilestonesNeedingVerification } = useMilestone();
   const [votes, setVotes] = useState("");
   const [loading, setLoading] = useState(false);

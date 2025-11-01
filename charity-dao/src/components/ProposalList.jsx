@@ -1,30 +1,33 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ethers } from "ethers";
 import { getContracts, getProposalContract } from "../utils/contracts";
 import { useWallet } from "../context/WalletContext";
-import { useNGOStatus } from "../context/useNGOStatus";
 import { useMilestone } from "../context/MilestoneContext";
 import VoteOnProposal from "./VoteOnProposal";
-import MilestoneProofUpload from "./MilestoneProofUpload";
+import MilestoneProof from "./MilestoneProof";
 import ErrorBoundary from "./ErrorBoundary";
 
-function ProposalList() {
+function ProposalList({ isNGO, isAdmin, statusLoading }) {
   const { account } = useWallet();
-  const { isNGO, isAdmin, loading: statusLoading } = useNGOStatus();
-  const { getCurrentMilestone, getMilestonesNeedingVerification, milestoneStatus } = useMilestone();
+  const { getCurrentMilestone, getMilestonesNeedingVerification, milestoneStatus, resetAllMilestones } = useMilestone();
   const [proposals, setProposals] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [voteCounts, setVoteCounts] = useState({});
 
-  const fetchProposals = async () => {
-    if (!account) return; // Skip if no wallet connected
+  const fetchProposals = useCallback(async () => {
+    if (!account) return;
     try {
       setLoading(true);
       setError(null);
-      const { proposalManager, votingManager, signer } = await getContracts();
-      const proposals = await proposalManager.getAllProjects();
+
+      const { proposalManager, votingManager } = await getContracts();
+      const proposals = await proposalManager.getAllProjects().catch(err => {
+        console.error("Failed to fetch proposals:", err);
+        throw new Error("Failed to fetch proposals: " + err.message);
+      });
       console.log("Proposals:", proposals);
+
       const proposalData = [];
       const voteData = {};
 
@@ -40,7 +43,10 @@ function ProposalList() {
         }
         
         // Get vote count for this proposal
-        const votes = await votingManager.getProposalVotes(proposal.id);
+        const votes = await votingManager.getProposalVotes(proposal.id).catch(err => {
+          console.error(`Failed to fetch votes for proposal ${proposal.id}:`, err);
+          return 0n; // Fallback to 0 votes
+        });
         voteData[proposal.id.toString()] = votes.toString();
         
         const proposalInfo = {
@@ -60,15 +66,16 @@ function ProposalList() {
         
         proposalData.push(proposalInfo);
       }
+
       setProposals(proposalData);
       setVoteCounts(voteData);
-      setLoading(false);
-    } catch (error) {
-      console.error("Failed to fetch proposals:", error, { reason: error.reason, data: error.data });
-      setError(`Failed to fetch proposals: ${error.message || "Unknown error"}`);
+    } catch (err) {
+      console.error("Failed to fetch proposals:", err);
+      setError(`Failed to fetch proposals: ${err.message || "Unknown error"}`);
+    } finally {
       setLoading(false);
     }
-  };
+  });
 
   useEffect(() => {
     // Wait for status loading to complete before fetching proposals
@@ -104,7 +111,7 @@ function ProposalList() {
         // Removed ProposalApproved listener cleanup since we don't listen for it anymore
       }
     };
-  }, [account, isNGO, isAdmin, statusLoading]);
+  }, [isNGO, isAdmin, statusLoading]);
 
   if (!account) {
     return (
@@ -161,9 +168,19 @@ function ProposalList() {
   return (
     <div className="w-full space-y-6">
       <div className="text-center mb-8">
-        <h2 className="text-3xl font-bold text-gray-800 mb-2">
-          {isNGO ? "Your Proposals" : "Active Proposals"}
-        </h2>
+        <div className="flex items-center justify-center gap-4 mb-2">
+          <h2 className="text-3xl font-bold text-gray-800">
+            {isNGO ? "Your Proposals" : "Active Proposals"}
+          </h2>
+          <button
+            onClick={fetchProposals}
+            className="bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+            title="Refresh proposals"
+          >
+            <span className="text-lg">🔄</span>
+            Refresh
+          </button>
+        </div>
         <p className="text-gray-600">
           {isNGO 
             ? "Manage and track your charity project proposals" 
@@ -269,73 +286,70 @@ function ProposalList() {
                   const needsVerification = isCompleted && !m.verified;
                   
                   return (
-                    <div key={index} className="flex items-start space-x-4 p-4 bg-gray-50 rounded-lg">
-                      <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-sm font-medium text-blue-600">
-                        {index + 1}
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-800 mb-1">{m.description}</p>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-600">
-                            Target: {ethers.formatEther(m.amount)} ETH
-                          </span>
-                          <div className="flex space-x-2">
-                            <span className={`px-2 py-1 rounded-full text-xs ${
-                              isCompleted ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                            }`}>
-                              {isCompleted ? 'Completed' : 'Pending'}
-                            </span>
-                            <span className={`px-2 py-1 rounded-full text-xs ${
-                              m.verified ? 'bg-blue-100 text-blue-800' : 
-                              needsVerification ? 'bg-orange-100 text-orange-800' :
-                              'bg-gray-100 text-gray-600'
-                            }`}>
-                              {m.verified ? 'Verified' : 
-                               needsVerification ? 'Needs Proof' :
-                               'Unverified'}
-                            </span>
-                          </div>
+                    <div key={index}>
+                      <div className="flex items-start space-x-4 p-4 bg-gray-50 rounded-lg">
+                        <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-sm font-medium text-blue-600">
+                          {index + 1}
                         </div>
-                        
-                        {/* Show proof details if verified */}
-                        {m.verified && milestoneStatus[p.id]?.[index] && (
-                          <div className="mt-2 p-2 bg-blue-50 rounded text-xs">
-                            <p className="text-blue-800 font-medium">Proof submitted:</p>
-                            <p className="text-blue-700">{milestoneStatus[p.id][index].proofText}</p>
-                            {milestoneStatus[p.id][index].proofUrl && (
-                              <a 
-                                href={milestoneStatus[p.id][index].proofUrl} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="text-blue-600 hover:text-blue-800 underline"
-                              >
-                                View supporting link
-                              </a>
-                            )}
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-800 mb-1">{m.description}</p>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-gray-600">
+                              Target: {ethers.formatEther(m.amount)} ETH
+                            </span>
+                            <div className="flex space-x-2">
+                              <span className={`px-2 py-1 rounded-full text-xs ${
+                                isCompleted ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                              }`}>
+                                {isCompleted ? 'Completed' : 'Pending'}
+                              </span>
+                              <span className={`px-2 py-1 rounded-full text-xs ${
+                                m.verified ? 'bg-blue-100 text-blue-800' : 
+                                needsVerification ? 'bg-orange-100 text-orange-800' :
+                                'bg-gray-100 text-gray-600'
+                              }`}>
+                                {m.verified ? 'Verified' : 
+                                needsVerification ? 'Needs Proof' :
+                                'Unverified'}
+                              </span>
+                            </div>
                           </div>
-                        )}
+                        
+                          {/* Show proof details if verified */}
+                          {m.verified && milestoneStatus[p.id]?.[index] && (
+                            <div className="mt-2 p-2 bg-blue-50 rounded text-xs">
+                              <p className="text-blue-800 font-medium">Proof submitted:</p>
+                              <p className="text-blue-700">{milestoneStatus[p.id][index].proofText}</p>
+                              {milestoneStatus[p.id][index].proofUrl && (
+                                <a 
+                                  href={milestoneStatus[p.id][index].proofUrl} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:text-blue-800 underline"
+                                >
+                                  View supporting link
+                                </a>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
+
+                      {/* Show milestone proof upload for NGOs when THIS specific milestone needs verification */}
+                      {isNGO && account && p.ngo.toLowerCase() === account.toLowerCase() && needsVerification && (
+                        <ErrorBoundary>
+                          <MilestoneProof
+                            proposal={p}
+                            milestoneIndex={index}
+                            milestone={m}
+                            onProofSubmitted={fetchProposals}
+                          />
+                        </ErrorBoundary>
+                      )}
                     </div>
                   );
                 })}
               </div>
-
-              {/* Show milestone proof upload for NGOs when milestones need verification */}
-              {isNGO && account && p.ngo.toLowerCase() === account.toLowerCase() && (() => {
-                const currentVotes = ethers.formatEther(voteCounts[p.id] || "0");
-                const milestonesNeedingVerification = getMilestonesNeedingVerification(p.id, currentVotes, p.milestones);
-                
-                return milestonesNeedingVerification.map(milestoneIndex => (
-                  <ErrorBoundary key={`proof-${milestoneIndex}`}>
-                    <MilestoneProofUpload
-                      proposal={p}
-                      milestoneIndex={milestoneIndex}
-                      milestone={p.milestones[milestoneIndex]}
-                      onProofSubmitted={fetchProposals}
-                    />
-                  </ErrorBoundary>
-                ));
-              })()}
 
               {/* Voting Section - Only show for regular users, not NGOs or admins */}
               {!isNGO && !isAdmin && (

@@ -1,9 +1,9 @@
 import './App.css'
 import WalletConnect from "./components/WalletConnect";
 import DonateETH from "./components/DonateETH";
-import CreateProposal from "./components/CreateProposal";
 import ProposalList from "./components/ProposalList";
 import VerifyNGO from "./components/VerifyNGO";
+import NGOPanel from "./components/NGOPanel";
 import { useNGOStatus } from "./context/useNGOStatus";
 import { useWallet } from "./context/WalletContext";
 // import AdminPanel from "./components/AdminPanel";
@@ -60,7 +60,7 @@ function App() {
           {/* Show donation only for regular users (not NGOs or admins) */}
           {!isNGO && !isAdmin && (
             <div className="w-full sm:w-96 max-w-md">
-              <DonateETH />
+              <DonateETH isNGO={isNGO} isAdmin={isAdmin} loading={loading} />
             </div>
           )}
           
@@ -70,11 +70,11 @@ function App() {
               <VerifyNGO />
             </div>
           )}
-          
-          {/* Show CreateProposal only for verified NGOs */}
+
+          {/* Show NGO Panel only for verified NGOs */}
           {isNGO && (
-            <div className="w-full sm:w-96 max-w-md">
-              <CreateProposal />
+            <div className="w-full sm:w-182 max-w-4xl">
+              <NGOPanel />
             </div>
           )}
           
@@ -106,7 +106,7 @@ function App() {
                       <span className="text-white font-bold">📋</span>
                     </div>
                     <div>
-                      <h2 className="text-2xl font-bold text-gray-800">Need to Create Proposals?</h2>
+                      <h2 className="text-2xl font-bold text-gray-800">Create Proposals?</h2>
                       <p className="text-gray-600 text-sm">Get verified as an NGO to submit projects</p>
                     </div>
                   </div>
@@ -121,26 +121,26 @@ function App() {
           
           {/* Info cards for NGOs */}
           {isNGO && !isAdmin && (
-            <>
-              <div className="w-full sm:w-96 max-w-md">
-                <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
-                  <div className="flex items-center mb-4">
-                    <div className="w-10 h-10 bg-gradient-to-r from-green-400 to-blue-500 rounded-lg flex items-center justify-center mr-3">
-                      <span className="text-white font-bold">👁️</span>
+              <div className="w-full sm:w-96 max-w-md space-y-6">
+                <div className="w-full">
+                  <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
+                    <div className="flex items-center mb-4">
+                      <div className="w-10 h-10 bg-gradient-to-r from-green-400 to-blue-500 rounded-lg flex items-center justify-center mr-3">
+                        <span className="text-white font-bold">👁️</span>
+                      </div>
+                      <div>
+                        <h2 className="text-2xl font-bold text-gray-800">View Your Proposals</h2>
+                        <p className="text-gray-600 text-sm">Track your charity project proposals</p>
+                      </div>
                     </div>
-                    <div>
-                      <h2 className="text-2xl font-bold text-gray-800">View Your Proposals</h2>
-                      <p className="text-gray-600 text-sm">Track your charity project proposals</p>
-                    </div>
+                    <p className="text-justify text-gray-600">
+                      As a verified NGO, you can view and manage your own charity proposals. 
+                      Users will vote on your projects to help them get funded.
+                    </p>
                   </div>
-                  <p className="text-gray-600">
-                    As a verified NGO, you can view and manage your own charity proposals. 
-                    Users will vote on your projects to help them get funded.
-                  </p>
                 </div>
-              </div>
               
-              <div className="w-full sm:w-96 max-w-md">
+              <div className="w-full">
                 <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
                   <div className="flex items-center mb-4">
                     <div className="w-10 h-10 bg-gradient-to-r from-blue-400 to-purple-500 rounded-lg flex items-center justify-center mr-3">
@@ -157,7 +157,7 @@ function App() {
                   </p>
                 </div>
               </div>
-            </>
+            </div>
           )}
           
           {/* Info cards for Admins */}
@@ -203,7 +203,7 @@ function App() {
         </div>
 
         {/* Proposals Section */}
-        <ProposalList />
+        <ProposalList isNGO={isNGO} isAdmin={isAdmin} loading={loading} />
       </div>
     </div>
   );

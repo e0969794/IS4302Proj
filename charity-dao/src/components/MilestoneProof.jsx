@@ -1,14 +1,22 @@
 import { useWallet } from '../context/WalletContext';
+import { useNGONavigation } from '../context/NGOContext';
 
-function MilestoneProofUpload({ proposal, milestoneIndex, milestone, onProofSubmitted }) {
+function MilestoneProof({ proposal, milestoneIndex, milestone, onProofSubmitted }) {
   const { account } = useWallet();
+  const { navigateToMilestoneProof } = useNGONavigation();
+
+  // If proposal or required data is missing, do not render
+  if (!proposal || !milestone || milestoneIndex === undefined) {
+    return null;
+  }
 
   // Check if current user is the NGO for this proposal
-  const isProposalOwner = account && proposal.ngo.toLowerCase() === account.toLowerCase();
+  const isProposalOwner = account && proposal.ngo && proposal.ngo.toLowerCase() === account.toLowerCase();
 
   const handleUploadClick = () => {
-    // Just a placeholder - no functionality yet
-    console.log('Upload proof clicked for milestone', milestoneIndex + 1);
+    console.log('Navigating to upload proof submission for proposal', proposal.id, 'milestone', milestoneIndex + 1);
+    // Navigate to the upload proof tab and scroll to NGO panel
+    navigateToMilestoneProof(proposal.id, milestoneIndex);
   };
 
   if (!isProposalOwner) {
@@ -45,4 +53,4 @@ function MilestoneProofUpload({ proposal, milestoneIndex, milestone, onProofSubm
   );
 }
 
-export default MilestoneProofUpload;
+export default MilestoneProof;
