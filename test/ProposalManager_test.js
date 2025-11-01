@@ -5,12 +5,14 @@ describe("ProposalManager", function () {
     let ProposalManager, proposalManager;
     let proposaltarget, proposalId;
     let admin, ngo;
+    let initialMintRate = 1;
     const milestonesDesc = ["Build school", "Purchase books"];
-    const milestonesAmt = [ethers.parseEther("1"), ethers.parseEther("2")];
+    const milestonesAmt = [1, 2];
 
     beforeEach(async function () {
         // Get signers
         [admin, ngo] = await ethers.getSigners();
+     
         // Deploy ProposalManager
         ProposalManager = await ethers.getContractFactory("ProposalManager");
         proposalManager = await ProposalManager.deploy();
@@ -45,7 +47,7 @@ describe("ProposalManager", function () {
 
         const milestone0 = await milestones[0];
         expect(milestone0[0]).to.equal("Build school");
-        expect(milestone0[1]).to.equal(ethers.parseEther("1"));
+        expect(milestone0[1]).to.equal(1);
     });
     // NGO should not be able to submit if not verified.
 });

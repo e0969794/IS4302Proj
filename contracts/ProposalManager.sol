@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 contract ProposalManager {
+
     address public proofOracle;
     uint256 public nextProposalId;
 
@@ -16,6 +17,7 @@ contract ProposalManager {
         uint256 id; //0 means not active (expired/completed)
         address ngo;
         Milestone[] milestones;
+        uint256 creation_date;
     }
 
     // proposalId -> proposalAddress
@@ -23,6 +25,8 @@ contract ProposalManager {
     // NGO address -> proposalIds
 
     event ProposalCreated(uint256 indexed proposalId, address ngo);
+    event ProposalKilled(uint256 indexed proposalId, address ngo);
+
 
     // Event emitted when a milestone is verified
     event MilestoneVerified(
@@ -71,6 +75,7 @@ contract ProposalManager {
         Proposal storage p = proposals[proposalId];
         p.id = proposalId;
         p.ngo = msg.sender;
+        p.creation_date = block.timestamp;
 
         for (uint256 i = 0; i < milestoneDescriptions.length; i++) {
             p.milestones.push(
@@ -94,7 +99,7 @@ contract ProposalManager {
         return proposals[proposalId];
     }
 
-    function getAllProjects() external view returns (Proposal[] memory) {
+    function getAllProposals() external view returns (Proposal[] memory) {
         Proposal[] memory all = new Proposal[](nextProposalId - 1);
         for (uint256 i = 1; i < nextProposalId; i++) {
             all[i - 1] = proposals[i];
@@ -116,6 +121,14 @@ contract ProposalManager {
         if (proposals[proposalId].id == 0) return false;
 
         return proposals[proposalId].ngo == ngo;
+    }
+
+    function killProposal(uint proposalId) external {
+        Proposal storage p = proposals[proposalId];
+        require(proposalId < nextProposalId && proposalId > 0, "Invalid proposalId");
+        require(p.id != 0, "Already inactive");
+        p.id = 0;
+        emit ProposalKilled(proposalId, p.ngo);
     }
 
     /**

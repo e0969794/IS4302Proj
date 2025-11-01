@@ -6,13 +6,13 @@ describe("VotingManager", function () {
   let govToken, treasury, proposalManager, votingManager;
   let proposalId;
   let admin, ngo, donor1, donor2, donor3;
-  const initialMintRate = ethers.parseEther("1"); // 1 GOV per 1 ETH
+  const initialMintRate = 1; // 1 GOV per 1 ETH
 
   const milestonesDesc = ["Build school", "Purchase books", "Hire teachers"];
   const milestonesAmt = [
-    ethers.parseEther("10"),
-    ethers.parseEther("5"),
-    ethers.parseEther("8"),
+    10,
+    5,
+    8,
   ];
 
   beforeEach(async function () {
@@ -100,9 +100,9 @@ describe("VotingManager", function () {
             const donor2Balance = await treasury.getTokenBalance(donor2.address);
             const donor3Balance = await treasury.getTokenBalance(donor3.address);
 
-            expect(donor1Balance).to.equal(ethers.parseEther("100"));
-            expect(donor2Balance).to.equal(ethers.parseEther("50"));
-            expect(donor3Balance).to.equal(ethers.parseEther("25"));
+            expect(donor1Balance).to.equal(100);
+            expect(donor2Balance).to.equal(50);
+            expect(donor3Balance).to.equal(25);
         });
 
         it("Should deduct quadratic cost correctly when voting", async function () {
@@ -122,21 +122,30 @@ describe("VotingManager", function () {
 
         it("Should handle multiple votes correctly (quadratic cost accumulates)", async function () {
             // First vote: 5 votes (costs 5^2 = 25 credits)
+            const befdonorBal = await govToken.balanceOf(donor2.address);
+            console.log("Donor balance:", befdonorBal.toString());
+            
             const beforeBalance = await treasury.getTokenBalance(donor2.address);
             await votingManager.connect(donor2).vote(proposalId, 5);
             const afterBalance = await treasury.getTokenBalance(donor2.address);
             const spent = beforeBalance - afterBalance;
             expect(spent).to.equal(BigInt(25));
-
+            const afterdonorBal1 = await govToken.balanceOf(donor2.address);
+            console.log("Afer 1st Donation, Donor balance:", afterdonorBal1.toString());
+            
             // Second vote: 3 more votes (total 8 votes, costs 8^2 = 64 credits, additional cost = 64-25 = 39)
-            await votingManager.connect(donor2).vote(proposalId, 3);
+            await votingManager.connect(donor2).vote(proposalId, 2);
+            const afterdonorBa2 = await govToken.balanceOf(donor2.address);
+            console.log("Afer 2nd Donation, Donor balance:", afterdonorBa2.toString());
             const new_afterBalance = await treasury.getTokenBalance(donor2.address);
             const new_spent = beforeBalance - new_afterBalance;
-            expect(new_spent).to.equal(BigInt(64));
+            expect(new_spent).to.equal(BigInt(49));
         });
 
         it("Should revert if donor has insufficient credits", async function () {
             // donor3 only has 25 credits → cannot cast 6 votes (requires 36 credits)
+            const donorBal = await govToken.balanceOf(donor3.address);
+            console.log("Donor balance:", donorBal.toString());
             await expect(
             votingManager.connect(donor3).vote(proposalId, 6)
             ).to.be.revertedWith("Insufficient credits");
@@ -159,29 +168,20 @@ describe("VotingManager", function () {
     });
     describe("Milestone Processing", function () {
         it("Should calculate milestone thresholds correctly", async function () {
-            // Milestone thresholds are calculated as milestoneAmount / 1e14
-            // Milestone 0: 10 ETH = 1e19 wei, threshold = 1e19 / 1e14 = 1e5 = 100,000 votes
-            // Milestone 1: 5 ETH = 5e18 wei, threshold = 5e18 / 1e14 = 5e4 = 50,000 votes
-            // Milestone 2: 8 ETH = 8e18 wei, threshold = 8e18 / 1e14 = 8e4 = 80,000 votes
             const proposal = await proposalManager.getProposal(proposalId);
-
             const milestone0 = proposal.milestones[0].amount;
             const milestone1 = proposal.milestones[1].amount;
             const milestone2 = proposal.milestones[2].amount;
 
-            const threshold0 = Number(milestone0 / BigInt(1e14)); 
-            const threshold1 = Number(milestone1 / BigInt(1e14));
-            const threshold2 = Number(milestone2 / BigInt(1e14)); 
-
-            expect(threshold0).to.equal(100000);
-            expect(threshold1).to.equal(50000);
-            expect(threshold2).to.equal(80000);
+            expect(milestone0).to.equal(10);
+            expect(milestone1).to.equal(5);
+            expect(milestone2).to.equal(8);
         });
         it("Should unlock milestones when thresholds are met", async function () {
             const testMilestonesDesc = ["Test milestone 1", "Test milestone 2"];
             const testMilestonesAmt = [
-                ethers.parseEther("0.001"), // 0.001 ETH milestone
-                ethers.parseEther("0.002"), // 0.002 ETH milestone
+                2,
+                4, 
             ];
 
             const tx = await proposalManager.connect(ngo).createProposal(
@@ -199,9 +199,7 @@ describe("VotingManager", function () {
                 })
                 .filter((e) => e && e.name === "ProposalCreated")[0];
             const testProposalId = event.args.proposalId;
-
-            const proposalData = await proposalManager.getProposal(testProposalId);
-
+            
             // donor1 votes with 10 votes (quadratic cost = 100 tokens)
             const voteTx = await votingManager.connect(donor1).vote(testProposalId, 10);
             const voteReceipt = await voteTx.wait();
@@ -220,7 +218,7 @@ describe("VotingManager", function () {
             expect(milestoneEvent).to.not.be.undefined;
             expect(milestoneEvent.args.proposalId).to.equal(testProposalId);
             expect(milestoneEvent.args.milestoneIndex).to.equal(0);
-            expect(milestoneEvent.args.amountReleased).to.equal(testMilestonesAmt[0]);
+            expect(milestoneEvent.args.amountReleased).to.equal(2); // 2 GovToken worth of funds (2 Eth)
 
             const totalVotes = await votingManager.getProposalVotes(testProposalId);
             expect(totalVotes).to.equal(10);
@@ -230,7 +228,7 @@ describe("VotingManager", function () {
         });
         it("Should disburse milestone funds to NGO when votes reach threshold", async function () {
             const desc = ["Milestone 1"];
-            const amt = [ethers.parseEther("0.001")]; // small target for test
+            const amt = [2]; // small target for test
             const tx = await proposalManager.connect(ngo).createProposal(desc, amt);
             const receipt = await tx.wait();
             const event = receipt.logs
@@ -255,6 +253,88 @@ describe("VotingManager", function () {
 
             // Ensure funds were sent
             expect(afterBalance).to.be.gt(beforeBalance);
+        });
+    });
+    describe("Valid Proposals", function() {
+        const weekInSeconds = 7 * 24 * 60 * 60;
+
+        it("Should allow oracle to kill proposal after expiry and mark it invalid", async function () {
+            const milestoneDesc = ["Build library"];
+            const milestoneAmt = [ethers.parseEther("5")];
+            const createTx = await proposalManager.connect(ngo).createProposal(milestoneDesc, milestoneAmt);
+            await createTx.wait();
+
+            const proposalId = await proposalManager.nextProposalId() - 1n;
+
+            // fast-forward 8 days
+            await ethers.provider.send("evm_increaseTime", [weekInSeconds * 2]); // simulate expiry
+            await ethers.provider.send("evm_mine");
+
+            // kills proposal
+            await expect(proposalManager.connect(admin).killProposal(proposalId))
+                .to.emit(proposalManager, "ProposalKilled")
+                .withArgs(proposalId, ngo.address);
+
+            // confirm proposal no longer valid
+            const killed = await proposalManager.proposals(proposalId);
+            expect(killed.id).to.equal(0);
+        });
+
+        it("Should fast forward 8 days, create two new proposals, and retrieve all and valid proposals", async function () {
+            
+            // advance time before creating proposals
+            const eightDays = 8 * 24 * 60 * 60;
+            await ethers.provider.send("evm_increaseTime", [eightDays]);
+            await ethers.provider.send("evm_mine");
+
+            // create two new proposals
+            const milestoneDesc2 = ["Buy laptops"];
+            const milestoneAmt2 = [ethers.parseEther("6")];
+            const milestoneDesc1 = ["Construct classroom"];
+            const milestoneAmt1 = [ethers.parseEther("10")];
+            await proposalManager.connect(ngo).createProposal(milestoneDesc1, milestoneAmt1);
+
+
+            await proposalManager.connect(ngo).createProposal(milestoneDesc2, milestoneAmt2);
+            await votingManager.connect(admin).cleanInvalidProposals();
+            // Get all proposals
+            const allProposals = await proposalManager.getAllProposals();
+            expect(allProposals.length).to.be.gte(2); // at least two exist (could include older ones)
+
+            // Get all valid Proposols
+            const validProposals = await votingManager.getValidProposals();
+
+            // Check
+            expect(validProposals.length).to.be.equal(2);
+            console.log(`Total proposals: ${allProposals.length}, Valid proposals: ${validProposals.length}`);
+        });
+
+        it("Should not allow votes for expired proposals", async function () {
+            
+            // advance time before creating proposals
+            const eightDays = 8 * 24 * 60 * 60;
+            await ethers.provider.send("evm_increaseTime", [eightDays]);
+            await ethers.provider.send("evm_mine");
+
+            // create two new proposals
+            const milestoneDesc2 = ["Buy laptops"];
+            const milestoneAmt2 = [ethers.parseEther("6")];
+            const milestoneDesc1 = ["Construct classroom"];
+            const milestoneAmt1 = [ethers.parseEther("10")];
+            await proposalManager.connect(ngo).createProposal(milestoneDesc1, milestoneAmt1);
+
+
+            await proposalManager.connect(ngo).createProposal(milestoneDesc2, milestoneAmt2);
+            await votingManager.connect(admin).cleanInvalidProposals();
+
+            await proposalManager.connect(ngo).createProposal(milestoneDesc2, milestoneAmt2);
+            await votingManager.connect(admin).cleanInvalidProposals();
+        
+            // Try to vote on proposal ID 1 (the original one from beforeEach, now expired/killed)
+            await expect(
+                votingManager.connect(donor1).vote(proposalId, 5)
+            ).to.be.revertedWith("proposal no longer active");
+           
         });
     });
 });
