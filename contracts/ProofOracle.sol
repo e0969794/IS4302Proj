@@ -115,7 +115,17 @@ contract ProofOracle is AccessControl {
         );
 
         bytes32 key = getKey(proposalId, milestoneIndex, msg.sender);
-        require(proofIndex[key] == 0, "Duplicate submission");
+
+        // Check if there's an existing proof
+        uint256 existingProofId = proofIndex[key];
+        if (existingProofId != 0) {
+            ProofSubmission storage existingProof = proofs[existingProofId];
+            // Allow resubmission only if previous proof was rejected
+            require(
+                existingProof.processed && !existingProof.approved,
+                "Proof already submitted or approved"
+            );
+        }
 
         uint256 proofId = nextProofId++;
         proofs[proofId] = ProofSubmission({

@@ -158,7 +158,7 @@ function CreateProposal() {
                         }}
                         className="absolute top-2 right-2 text-red-500 hover:text-red-700 text-sm font-medium flex items-center space-x-1 transition-colors"
                       >
-                        <span className="mr-1">×</span> Delete
+                        ✕ Cancel
                       </button>
                     )}
                 
@@ -169,12 +169,12 @@ function CreateProposal() {
                   </span>
                 </div>
                 <div className="space-y-3">
-                  <input
-                    type="text"
+                  <textarea
                     value={milestone.description}
                     onChange={(e) => handleMilestoneChange(index, "description", e.target.value)}
-                    placeholder="Describe this milestone (e.g. 'Purchase medical supplies')"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    placeholder={`Describe this milestone\n(e.g. 'Purchase medical supplies')`}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                    rows="3" // Adjust rows for desired height
                   />
                   <div className="relative">
                     <input
@@ -193,7 +193,7 @@ function CreateProposal() {
                           e.preventDefault();
                         }
                       }}
-                      placeholder="Cumulative amount needed (ETH)"
+                      placeholder="Cumulative amount needed"
                       className="w-full pl-3 pr-14 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     />
                     <span className="absolute right-3 top-2 text-gray-500 text-sm pointer-events-none">ETH</span>

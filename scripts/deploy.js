@@ -2,9 +2,6 @@ const fs = require("fs");
 const path = require("path");
 const { ethers } = require("hardhat");
 
-const ENV_PATH = path.join(process.cwd(), "./charity-dao/.env");
-let envVars = {};
-
 function getEnv() {
     if (fs.existsSync(ENV_PATH)) {
         const content = fs.readFileSync(ENV_PATH, "utf8");
@@ -37,8 +34,27 @@ function updateEnv(vars) {
 }
 
 async function main() {
+    const CONFIG_PATH = path.join(process.cwd(), "./charity-dao/config.json");
+
+    // Read existing config.json if present
+    let existingConfig = {};
+    if (fs.existsSync(CONFIG_PATH)) {
+        try {
+            existingConfig = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+        } catch (err) {
+            console.warn("Could not parse existing config.json, starting fresh:", err);
+        }
+    }
+
+    // Prepare immutable fields (Pinata + IPFS) — load from defaults
+    const staticFields = {
+        NGO_IPFS_URL: existingConfig.NGO_IPFS_URL,
+        Pinata_API_Key: existingConfig.Pinata_API_Key,
+        Pinata_Secret_Key: existingConfig.Pinata_Secret_Key,
+        Pinata_Group_ID: existingConfig.Pinata_Group_ID
+    };
+
     // Wallets and Signers
-    getEnv();
     const wallets = {
         admin: null,
         donor: [],
@@ -50,7 +66,7 @@ async function main() {
         "World Wildlife Fund - Environmental conservation and research",
         "Global Health Corps - Improving healthcare access in underserved regions"
     ];
-    const IpfsURL = envVars.NGO_IPFS_URL || "ipfs://abcd";
+    const IpfsURL = staticFields.NGO_IPFS_URL || "ipfs://abcd";
     const numNGOs = ngoDetails.length; // Number of NGO wallets to generate
 
     // Set up wallets
@@ -214,15 +230,26 @@ async function main() {
     });
     console.log("NGO IPFS:", IpfsURL);
 
-    // Write .env for frontend
-    updateEnv({
-        VITE_GOVTOKEN_ADDRESS: await governanceToken.getAddress(),
-        VITE_TREASURY_ADDRESS: await treasury.getAddress(),
-        VITE_NGO_ORACLE_ADDRESS: await ngoOracle.getAddress(),
-        VITE_PROPOSAL_MANAGER_ADDRESS: await proposalManager.getAddress(),
-        VITE_PROOF_ORACLE_ADDRESS: await proofOracle.getAddress(),
-        VITE_VOTING_MANAGER_ADDRESS: await votingManager.getAddress()
-    });
+    // Prepare updated contract addresses
+    const addressFields = {
+        GovernanceToken: await governanceToken.getAddress(),
+        Treasury: await treasury.getAddress(),
+        NGOOracle: await ngoOracle.getAddress(),
+        ProposalManager: await proposalManager.getAddress(),
+        ProofOracle: await proofOracle.getAddress(),
+        VotingManager: await votingManager.getAddress()
+    };
+
+    // Merge together (immutable + dynamic)
+    const newConfig = {
+        ...staticFields,
+        ...addressFields,
+        updatedAt: new Date().toISOString()
+    };
+    
+    // Write final JSON
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(newConfig, null, 2));
+    console.log("Wrote new addresses to:", CONFIG_PATH);
 }
 
 main()

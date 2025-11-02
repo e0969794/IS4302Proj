@@ -5,23 +5,25 @@ import { useWallet } from "../context/WalletContext";
 import { useMilestone } from "../context/MilestoneContext";
 import VoteOnProposal from "./VoteOnProposal";
 import MilestoneProof from "./MilestoneProof";
+import ProofReview from "./ProofReview";
 import ErrorBoundary from "./ErrorBoundary";
 
 function ProposalList({ isNGO, isAdmin, statusLoading }) {
   const { account } = useWallet();
-  const { getCurrentMilestone, getMilestonesNeedingVerification, milestoneStatus, resetAllMilestones } = useMilestone();
+  const { getCurrentMilestone, milestoneStatus } = useMilestone();
   const [proposals, setProposals] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [voteCounts, setVoteCounts] = useState({});
+  const [submittedProofs, setSubmittedProofs] = useState({}); // Track submitted proofs: {proposalId: {milestoneIndex: proofId}}
+  const [rejectedProofs, setRejectedProofs] = useState({}); // Track rejected proofs: {proposalId: {milestoneIndex: {rejected: bool, reason: string}}}
 
   const fetchProposals = useCallback(async () => {
-    if (!account) return;
     try {
       setLoading(true);
       setError(null);
 
-      const { proposalManager, votingManager } = await getContracts();
+      const { proposalManager, votingManager, proofOracle } = await getContracts();
       const proposals = await proposalManager.getAllProjects().catch(err => {
         console.error("Failed to fetch proposals:", err);
         throw new Error("Failed to fetch proposals: " + err.message);
@@ -30,10 +32,12 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
 
       const proposalData = [];
       const voteData = {};
+      const proofData = {};
+      const rejectedProofsData = {};
 
       for (let proposal of proposals) {
         console.log(`Processing proposal ${proposal.id}: NGO=${proposal.ngo}`);
-        
+
         // Filter proposals based on user type
         // If user is NGO, only show their own proposals
         // If user is regular user or admin, show all proposals
@@ -41,14 +45,57 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
           console.log(`Skipping proposal ${proposal.id} - NGO can only see own proposals`);
           continue;
         }
-        
+
         // Get vote count for this proposal
         const votes = await votingManager.getProposalVotes(proposal.id).catch(err => {
           console.error(`Failed to fetch votes for proposal ${proposal.id}:`, err);
           return 0n; // Fallback to 0 votes
         });
         voteData[proposal.id.toString()] = votes.toString();
-        
+
+        // Check for submitted proofs for each milestone
+        proofData[proposal.id.toString()] = {};
+        const rejectionData = {};
+        for (let index = 0; index < proposal.milestones.length; index++) {
+          try {
+            const key = ethers.solidityPackedKeccak256(
+              ['uint256', 'uint256', 'address'],
+              [proposal.id, index, proposal.ngo]
+            );
+            const proofId = await proofOracle.proofIndex(key);
+
+            if (proofId > 0) {
+              // Fetch proof details to check if it was rejected
+              const proof = await proofOracle.getProof(proofId);
+
+              if (proof.processed && !proof.approved) {
+                // Proof was rejected
+                rejectionData[index] = {
+                  rejected: true,
+                  reason: proof.reason || "No reason provided"
+                };
+                proofData[proposal.id.toString()][index] = 0; // Don't show as submitted
+              } else {
+                proofData[proposal.id.toString()][index] = Number(proofId);
+                rejectionData[index] = { rejected: false };
+              }
+            } else {
+              proofData[proposal.id.toString()][index] = 0;
+              rejectionData[index] = { rejected: false };
+            }
+          } catch (error) {
+            console.error(`Error checking proof for proposal ${proposal.id} milestone ${index}:`, error);
+            proofData[proposal.id.toString()][index] = 0;
+            rejectionData[index] = { rejected: false };
+          }
+        }
+
+        // Store rejection data for this proposal
+        if (!rejectedProofsData[proposal.id.toString()]) {
+          rejectedProofsData[proposal.id.toString()] = {};
+        }
+        rejectedProofsData[proposal.id.toString()] = rejectionData;
+
         const proposalInfo = {
           id: proposal.id.toString(),
           ngo: proposal.ngo,
@@ -56,32 +103,34 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
             index,
             description: milestone.description,
             amount: milestone.amount.toString(),
-            verified: milestoneStatus[proposal.id.toString()]?.[index]?.verified || false,
+            verified: milestone.verified, // Read directly from contract
+            proofHash: milestone.proofHash,
             completed: false // Will be calculated based on current votes
           })),
-          totalFunds: proposal.milestones.length > 0 ? 
+          totalFunds: proposal.milestones.length > 0 ?
             proposal.milestones[proposal.milestones.length - 1].amount.toString() : "0"
           // Removed approved status since proposals are auto-approved when created
         };
-        
+
         proposalData.push(proposalInfo);
       }
 
       setProposals(proposalData);
       setVoteCounts(voteData);
+      setSubmittedProofs(proofData);
+      setRejectedProofs(rejectedProofsData);
     } catch (err) {
       console.error("Failed to fetch proposals:", err);
       setError(`Failed to fetch proposals: ${err.message || "Unknown error"}`);
     } finally {
       setLoading(false);
     }
-  });
+  }, [account, isNGO, milestoneStatus]);
 
   useEffect(() => {
     // Wait for status loading to complete before fetching proposals
-    if (!statusLoading) {
-      fetchProposals(); // Fetch on mount or account change
-    }
+    if (!account || statusLoading) return;
+    fetchProposals(); // Fetch on mount or account change
 
     // Event listener for ProposalCreated
     let proposalManager;
@@ -111,7 +160,7 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
         // Removed ProposalApproved listener cleanup since we don't listen for it anymore
       }
     };
-  }, [isNGO, isAdmin, statusLoading]);
+  }, [account, isNGO, isAdmin, statusLoading]);
 
   if (!account) {
     return (
@@ -166,7 +215,7 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
   }
 
   return (
-    <div className="w-full space-y-6">
+    <div className="w-full max-w-7xl mx-auto space-y-6">
       <div className="text-center mb-8">
         <div className="flex items-center justify-center gap-4 mb-2">
           <h2 className="text-3xl font-bold text-gray-800">
@@ -202,10 +251,28 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
                     Proposal #{p.id.toString()}
                   </h3>
                   <div className="flex items-center space-x-4 text-sm text-gray-600">
-                    <span className="flex items-center">
-                      <span className="w-2 h-2 bg-green-400 rounded-full mr-2"></span>
-                      Active (Auto-approved)
-                    </span>
+                    {(() => {
+                      const allMilestonesVerified = p.milestones?.every((m) => m.verified);
+                      const currentVotes = ethers.formatEther(voteCounts[p.id] || "0");
+                      const currentMilestone = getCurrentMilestone(p.id, currentVotes, p.milestones);
+                      const isProjectComplete = currentMilestone >= (p.milestones?.length - 1) && allMilestonesVerified;
+
+                      if (isProjectComplete) {
+                        return (
+                          <span className="flex items-center">
+                            <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+                            Complete
+                          </span>
+                        );
+                      } else {
+                        return (
+                          <span className="flex items-center">
+                            <span className="w-2 h-2 bg-green-400 rounded-full mr-2"></span>
+                            Active
+                          </span>
+                        );
+                      }
+                    })()}
                     <span>NGO: {p.ngo.slice(0, 6)}...{p.ngo.slice(-4)}</span>
                   </div>
                 </div>
@@ -283,8 +350,12 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
                   const currentVotes = ethers.formatEther(voteCounts[p.id] || "0");
                   const currentMilestone = getCurrentMilestone(p.id, currentVotes, p.milestones);
                   const isCompleted = index <= currentMilestone;
-                  const needsVerification = isCompleted && !m.verified;
-                  
+                  const proofId = submittedProofs[p.id]?.[index] || 0;
+                  const proofSubmitted = proofId > 0;
+                  const isRejected = rejectedProofs[p.id]?.[index]?.rejected || false;
+                  const rejectionReason = rejectedProofs[p.id]?.[index]?.reason || "";
+                  const needsVerification = isCompleted && !m.verified && !proofSubmitted && !isRejected;
+
                   return (
                     <div key={index}>
                       <div className="flex items-start space-x-4 p-4 bg-gray-50 rounded-lg">
@@ -303,15 +374,18 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
                               }`}>
                                 {isCompleted ? 'Completed' : 'Pending'}
                               </span>
-                              <span className={`px-2 py-1 rounded-full text-xs ${
-                                m.verified ? 'bg-blue-100 text-blue-800' : 
-                                needsVerification ? 'bg-orange-100 text-orange-800' :
-                                'bg-gray-100 text-gray-600'
-                              }`}>
-                                {m.verified ? 'Verified' : 
-                                needsVerification ? 'Needs Proof' :
-                                'Unverified'}
-                              </span>
+                              {(m.verified || proofSubmitted || needsVerification || isRejected) && (
+                                <span
+                                  className={`px-2 py-1 rounded-full text-xs ${
+                                    m.verified ? 'bg-blue-100 text-blue-800'
+                                      : proofSubmitted ? 'bg-purple-100 text-purple-800'
+                                      : isRejected ? 'bg-red-100 text-red-800'
+                                      : 'bg-orange-100 text-orange-800'
+                                  }`}
+                                >
+                                  {m.verified ? 'Verified' : proofSubmitted ? 'Pending Review' : isRejected ? 'Proof Rejected' : 'Needs Proof'}
+                                </span>
+                              )}
                             </div>
                           </div>
                         
@@ -321,9 +395,9 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
                               <p className="text-blue-800 font-medium">Proof submitted:</p>
                               <p className="text-blue-700">{milestoneStatus[p.id][index].proofText}</p>
                               {milestoneStatus[p.id][index].proofUrl && (
-                                <a 
-                                  href={milestoneStatus[p.id][index].proofUrl} 
-                                  target="_blank" 
+                                <a
+                                  href={milestoneStatus[p.id][index].proofUrl}
+                                  target="_blank"
                                   rel="noopener noreferrer"
                                   className="text-blue-600 hover:text-blue-800 underline"
                                 >
@@ -332,17 +406,36 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
                               )}
                             </div>
                           )}
+
+                          {/* Show rejection reason if proof was rejected */}
+                          {isRejected && (
+                            <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded text-xs">
+                              <p className="text-red-800 font-semibold mb-1">⚠️ Proof Rejected by Admin</p>
+                              <p className="text-red-700"><strong>Reason:</strong> {rejectionReason}</p>
+                              <p className="text-red-600 mt-1 italic">Please submit a new proof addressing the feedback above.</p>
+                            </div>
+                          )}
                         </div>
                       </div>
 
-                      {/* Show milestone proof upload for NGOs when THIS specific milestone needs verification */}
-                      {isNGO && account && p.ngo.toLowerCase() === account.toLowerCase() && needsVerification && (
+                      {/* Show milestone proof upload for NGOs when THIS specific milestone needs verification OR was rejected */}
+                      {isNGO && account && p.ngo.toLowerCase() === account.toLowerCase() && (needsVerification || isRejected) && (
                         <ErrorBoundary>
                           <MilestoneProof
                             proposal={p}
                             milestoneIndex={index}
                             milestone={m}
                             onProofSubmitted={fetchProposals}
+                          />
+                        </ErrorBoundary>
+                      )}
+
+                      {/* Show proof review for admins when proof is submitted but not yet verified */}
+                      {isAdmin && proofSubmitted && !m.verified && (
+                        <ErrorBoundary>
+                          <ProofReview
+                            proofId={proofId}
+                            onReviewComplete={fetchProposals}
                           />
                         </ErrorBoundary>
                       )}
@@ -355,10 +448,13 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
               {!isNGO && !isAdmin && (
                 <div className="mt-6 pt-6 border-t border-gray-100">
                   <ErrorBoundary>
-                    <VoteOnProposal 
-                      proposal={p} 
+                    <VoteOnProposal
+                      proposal={p}
                       onVoteSuccess={fetchProposals}
                       currentVoteCount={ethers.formatEther(voteCounts[p.id] || "0")}
+                      isNGO={isNGO}
+                      isAdmin={isAdmin}
+                      statusLoading={loading}
                     />
                   </ErrorBoundary>
                 </div>

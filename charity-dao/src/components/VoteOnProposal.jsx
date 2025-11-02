@@ -2,13 +2,11 @@ import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 import { getContracts } from "../utils/contracts";
 import { useWallet } from "../context/WalletContext";
-import { useNGOStatus } from "../context/useNGOStatus";
 import { useMilestone } from "../context/MilestoneContext";
 
-function VoteOnProposal({ proposal, onVoteSuccess, currentVoteCount }) {
+function VoteOnProposal({ proposal, onVoteSuccess, currentVoteCount, isNGO, isAdmin, statusLoading }) {
   const { account, balance } = useWallet();
-  const { isNGO, isAdmin, statusLoading } = useNGOStatus();
-  const { isVotingBlocked, getCurrentMilestone, getMilestonesNeedingVerification } = useMilestone();
+  const { getCurrentMilestone } = useMilestone();
   const [votes, setVotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -16,15 +14,38 @@ function VoteOnProposal({ proposal, onVoteSuccess, currentVoteCount }) {
   const [showVoteForm, setShowVoteForm] = useState(false);
   const [previousVotes, setPreviousVotes] = useState(0);
 
+  // Build verification status object from proposal milestone data
+  const verificationStatus = {};
+  if (proposal.milestones) {
+    proposal.milestones.forEach((milestone, index) => {
+      verificationStatus[index] = { verified: milestone.verified === true };
+    });
+  }
+
   // Check if voting is blocked due to milestone verification
-  const votingBlocked = isVotingBlocked(proposal.id, currentVoteCount || 0, proposal.milestones || []);
   const currentMilestone = getCurrentMilestone(proposal.id, currentVoteCount || 0, proposal.milestones || []);
-  const milestonesNeedingVerification = getMilestonesNeedingVerification(proposal.id, currentVoteCount || 0, proposal.milestones || []);
+
+  // Check if project is fully complete (all milestones reached and verified)
+  const isProjectComplete = currentMilestone >= (proposal.milestones?.length - 1) &&
+                           proposal.milestones?.every((m) => m.verified);
+
+  // Check if any reached milestone is unverified (including the current milestone)
+  let votingBlocked = false;
+  const milestonesNeedingVerification = [];
+
+  // Check all milestones that have been reached (including current one)
+  // If votes have reached a milestone threshold, it must be verified before voting can continue
+  for (let i = 0; i <= currentMilestone; i++) {
+    if (!verificationStatus[i]?.verified) {
+      votingBlocked = true;
+      milestonesNeedingVerification.push(i);
+    }
+  }
 
   const handleVoteInputChange = (e) => {
     const value = e.target.value;
     // Only allow positive numbers and empty string
-    if (value === "" || (!isNaN(value) && parseInt(value) >= 0)) {
+    if (value === "" || (!isNaN(value) && Number(value) >= 0)) {
       setVotes(value);
     }
   };
@@ -36,10 +57,10 @@ function VoteOnProposal({ proposal, onVoteSuccess, currentVoteCount }) {
         return "0";
       }
       
-      const add = parseInt(additionalVotes);
+      const add = Number(additionalVotes);
       if (add <= 0) return "0";
       
-      const prev = parseInt(previousVotes || 0);
+      const prev = Number(previousVotes || 0);
       const total = prev + add;
       
       // Prevent negative costs and handle edge cases
@@ -78,17 +99,22 @@ function VoteOnProposal({ proposal, onVoteSuccess, currentVoteCount }) {
         return;
       }
 
+      if (isProjectComplete) {
+        setError("This project is complete. All milestones have been reached and verified.");
+        return;
+      }
+
       if (votingBlocked) {
         setError("Voting is currently disabled. The NGO must submit proof for completed milestones before voting can continue.");
         return;
       }
       
-      if (!votes || isNaN(votes) || parseInt(votes) <= 0) {
+      if (!votes || isNaN(votes) || Number(votes) <= 0) {
         setError("Please enter a valid number of votes");
         return;
       }
 
-      const voteAmount = parseInt(votes);
+      const voteAmount = Number(votes);
       const cost = calculateVotingCost(votes);
       
       // The balance is in formatted ETH (e.g., "5.0"), cost is raw number
@@ -186,16 +212,28 @@ function VoteOnProposal({ proposal, onVoteSuccess, currentVoteCount }) {
       );
     }
 
+    if (isProjectComplete) {
+      return (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <p className="text-green-700 text-sm">
+            <strong>✅ Project Complete:</strong> All milestones have been reached and verified! No further voting is needed.
+          </p>
+          <p className="text-green-600 text-xs mt-2">
+            This project has successfully completed all {proposal.milestones?.length} milestone(s).
+          </p>
+        </div>
+      );
+    }
+
     if (votingBlocked) {
       return (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <p className="text-red-700 text-sm">
-            <strong>🚫 Voting Temporarily Disabled:</strong> This proposal has reached milestone {currentMilestone + 1}. 
-            The NGO must submit proof of completion before voting can continue for the next milestone.
+            <strong>🚫 Voting Temporarily Disabled:</strong> The NGO must submit proof before voting can continue.
           </p>
           {milestonesNeedingVerification.length > 0 && (
             <p className="text-red-600 text-xs mt-2">
-              Milestones awaiting verification: {milestonesNeedingVerification.map(i => i + 1).join(", ")}
+              {milestonesNeedingVerification.length} milestone(s) awaiting verification: #{milestonesNeedingVerification.map(i => i + 1).join(", #")}
             </p>
           )}
         </div>
@@ -206,9 +244,10 @@ function VoteOnProposal({ proposal, onVoteSuccess, currentVoteCount }) {
       <button
         onClick={() => setShowVoteForm(true)}
         className="bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white px-4 py-2 rounded-lg font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
-        disabled={!account || statusLoading || votingBlocked}
+        disabled={!account || statusLoading || votingBlocked || isProjectComplete}
       >
-        {statusLoading ? "Checking permissions..." : 
+        {statusLoading ? "Checking permissions..." :
+         isProjectComplete ? "✅ Project Complete" :
          votingBlocked ? "🚫 Voting Disabled (Awaiting Milestone Proof)" :
          "🗳️ Vote on This Proposal"}
       </button>
@@ -223,7 +262,7 @@ function VoteOnProposal({ proposal, onVoteSuccess, currentVoteCount }) {
           onClick={() => setShowVoteForm(false)}
           className="text-purple-600 hover:text-purple-800"
         >
-          ✕
+          ✕ Cancel
         </button>
       </div>
       
@@ -247,7 +286,7 @@ function VoteOnProposal({ proposal, onVoteSuccess, currentVoteCount }) {
             className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
             disabled={loading}
           />
-          {votes && votes !== "" && !isNaN(votes) && parseInt(votes) > 0 && (
+          {votes && votes !== "" && !isNaN(votes) && Number(votes) > 0 && (
             <p className="text-sm text-purple-600 mt-1">
               Cost: {calculateVotingCost(votes)} GOV tokens
             </p>
@@ -258,11 +297,11 @@ function VoteOnProposal({ proposal, onVoteSuccess, currentVoteCount }) {
           <button
             type="submit"
             className={`flex-1 py-2 px-4 rounded-lg font-medium transition-all duration-200 ${
-              loading || !account || !votes || isNGO || isAdmin || votingBlocked
+              loading || !account || !votes || isNGO || isAdmin || votingBlocked || isProjectComplete
                 ? "bg-gray-300 text-gray-500 cursor-not-allowed"
                 : "bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white shadow-md hover:shadow-lg"
             }`}
-            disabled={loading || !account || !votes || isNGO || isAdmin || votingBlocked}
+            disabled={loading || !account || !votes || isNGO || isAdmin || votingBlocked || isProjectComplete}
           >
             {loading ? (
               <div className="flex items-center justify-center">
@@ -273,18 +312,13 @@ function VoteOnProposal({ proposal, onVoteSuccess, currentVoteCount }) {
               "NGOs Cannot Vote"
             ) : isAdmin ? (
               "Admins Cannot Vote"
+            ) : isProjectComplete ? (
+              "Project Complete"
             ) : votingBlocked ? (
               "Voting Disabled"
             ) : (
               "Cast Vote"
             )}
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowVoteForm(false)}
-            className="px-4 py-2 text-purple-600 border border-purple-300 rounded-lg hover:bg-purple-50 transition-colors duration-200"
-          >
-            Cancel
           </button>
         </div>
       </form>

@@ -28,7 +28,7 @@ function NGOPanel({ isNGO, isAdmin, statusLoading }) {
           <button
             onClick={() => setActiveTab("upload")}
             className={`flex-1 px-6 py-4 font-medium transition-all duration-200 ${
-              activeTab === "verify"
+              activeTab === "upload"
                 ? "bg-gradient-to-r from-purple-500 to-pink-600 text-white shadow-md"
                 : "bg-gray-50 text-gray-600 hover:bg-gray-100"
             }`}
@@ -49,7 +49,7 @@ function NGOPanel({ isNGO, isAdmin, statusLoading }) {
           </div>
         ) : (
           <div className="p-6">
-            <UploadProof />
+            <UploadProof onUploadComplete={(url) => console.log("Proof uploaded:", url)}/>
           </div>
         )}
       </div>

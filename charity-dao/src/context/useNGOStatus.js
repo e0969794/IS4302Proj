@@ -8,39 +8,39 @@ export function useNGOStatus() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const checkStatus = useCallback(async () => {
-    if (!account) {
-      setIsNGO(false);
-      setIsAdmin(false);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const { ngoOracle, treasury } = await getContracts();
-      
-      // Check if NGO
-      console.log("Checking NGO status for:", account);
-      const ngoStatus = await ngoOracle.approvedNGOs(account);
-      console.log("NGO status:", ngoStatus);
-      setIsNGO(ngoStatus);
-      
-      // Check if admin (has DEFAULT_ADMIN_ROLE on treasury)
-      const adminRole = await treasury.DEFAULT_ADMIN_ROLE();
-      const adminStatus = await treasury.hasRole(adminRole, account);
-      setIsAdmin(adminStatus);
-    } catch (error) {
-      console.error("Error checking user status:", error);
-      setIsNGO(false);
-      setIsAdmin(false);
-    } finally {
-      setLoading(false);
-    }
-  }, [account]);
-
   useEffect(() => {
+    const checkStatus = async () => {
+      if (!account) {
+        setIsNGO(false);
+        setIsAdmin(false);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const { ngoOracle, treasury } = await getContracts();
+        
+        // Check if NGO
+        console.log("Checking NGO status for:", account);
+        const ngoStatus = await ngoOracle.approvedNGOs(account);
+        console.log("NGO status:", ngoStatus);
+        setIsNGO(ngoStatus);
+        
+        // Check if admin (has DEFAULT_ADMIN_ROLE on treasury)
+        const adminRole = await treasury.DEFAULT_ADMIN_ROLE();
+        const adminStatus = await treasury.hasRole(adminRole, account);
+        setIsAdmin(adminStatus);
+      } catch (error) {
+        console.error("Error checking user status:", error);
+        setIsNGO(false);
+        setIsAdmin(false);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     checkStatus();
-  }, [checkStatus]);
+  }, [account]);
 
   return { isNGO, isAdmin, loading };
 }
