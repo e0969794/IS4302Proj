@@ -8,7 +8,6 @@ export const NGOProvider = ({ children }) => {
 
   // Function to switch to milestone proof tab and scroll to it
   const navigateToMilestoneProof = useCallback((proposalId = null, milestoneIndex = null) => {
-    console.log("test");
     // Switch to milestone tab
     setActiveTab("upload");
     

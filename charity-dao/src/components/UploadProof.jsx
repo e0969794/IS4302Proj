@@ -118,7 +118,7 @@ function UploadProof({ proposalId, milestoneIndex, onUploadComplete }) {
       // Extract the revert reason if available
       let errorMessage = "Transaction failed: Unknown error";
       if (err.reason) {
-        // For contract reverts (e.g., "Duplicate submission")
+        // For contract reverts (e.g. "Duplicate submission")
         errorMessage = `Transaction failed: ${err.reason}`;
       } else if (err.message.includes("execution reverted")) {
         // Fallback: Extract message from revert error

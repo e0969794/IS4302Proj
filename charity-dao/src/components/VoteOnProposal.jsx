@@ -117,7 +117,7 @@ function VoteOnProposal({ proposal, onVoteSuccess, currentVoteCount, isNGO, isAd
       const voteAmount = Number(votes);
       const cost = calculateVotingCost(votes);
       
-      // The balance is in formatted ETH (e.g., "5.0"), cost is raw number
+      // The balance is in formatted ETH (e.g. "5.0"), cost is raw number
       // Need to compare properly
       if (parseFloat(balance) < parseFloat(cost)) {
         setError(`Insufficient GOV tokens. Need ${cost} GOV, you have ${balance} GOV`);

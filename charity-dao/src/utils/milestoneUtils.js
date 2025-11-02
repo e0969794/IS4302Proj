@@ -10,7 +10,7 @@ import { ethers } from 'ethers';
 export const normalizeVoteCount = (voteCount) => {
   try {
     if (typeof voteCount === 'string') {
-      // If it's already in ETH format (e.g., "5.0"), return as is
+      // If it's already in ETH format (e.g. "5.0"), return as is
       if (!voteCount.includes('e') && parseFloat(voteCount) < 1000000) {
         return voteCount;
       }

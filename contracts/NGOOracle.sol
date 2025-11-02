@@ -7,7 +7,7 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 contract NGOOracle is AccessControl {
     // Mapping to track whether an address is an approved NGO
     mapping(address => bool) public approvedNGOs;
-    // Single IPFS URL (e.g., ipfs://<CID>) pointing to a JSON file with all NGO details
+    // Single IPFS URL (e.g. ipfs://<CID>) pointing to a JSON file with all NGO details
     // JSON format:
     // {"ngos":[{"address":"0xNGO1",
     // "name":"NGO1","description":"Charity","registrationId":"123"},...]}
@@ -138,7 +138,7 @@ contract NGOOracle is AccessControl {
 
     /**
      * @notice Retrieves the IPFS URL for the JSON file containing all NGO details
-     * @return The IPFS URL (e.g., ipfs://<CID>)
+     * @return The IPFS URL (e.g. ipfs://<CID>)
      */
     function getNGODetailsURL() external view returns (string memory) {
         return ngoDetailsURL;

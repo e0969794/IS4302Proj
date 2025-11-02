@@ -127,7 +127,7 @@ contract ProposalManager {
      *      On success: stores keccak256 hash of proofURL and sets verified = true
      * @param proposalId ID of the target proposal
      * @param milestoneIndex Index of the milestone within the proposal
-     * @param proofURL Full IPFS URL (e.g., ipfs://Qm...) of the uploaded proof
+     * @param proofURL Full IPFS URL (e.g. ipfs://Qm...) of the uploaded proof
      * @return success True if milestone was successfully verified, false otherwise
      */
     function verifyMilestone(uint256 proposalId, uint256 milestoneIndex,
