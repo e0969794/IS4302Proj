@@ -2,7 +2,7 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 
-describe("CharityDAO Contracts - Oracles", function () {
+describe("Oracles", function () {
     // Contract Factories and Instances
     let ProposalManager, NGOOracle, ProofOracle;
     let proposalManager, ngoOracle, proofOracle;
@@ -119,7 +119,7 @@ describe("CharityDAO Contracts - Oracles", function () {
 
     describe("NGOOracle", function () {
         it("Should initialize with correct IPFS URL and approved NGOs", async function () {
-            expect(await ngoOracle.getNGODetailsUrl()).to.equal(mockIpfsUrl);
+            expect(await ngoOracle.getNGODetailsURL()).to.equal(mockIpfsUrl);
             for (let i = 0; i < wallets.ngo.length - 1; i++) {
                 expect(await ngoOracle.approvedNGOs(wallets.ngo[i].signer.address)).to.equal(true);
             }
@@ -128,7 +128,7 @@ describe("CharityDAO Contracts - Oracles", function () {
 
         it("Should simulate JSON parsing and verify NGO details", async function () {
             // Simulate fetching and parsing the JSON from the IPFS URL
-            const ipfsUrl = await ngoOracle.getNGODetailsUrl();
+            const ipfsUrl = await ngoOracle.getNGODetailsURL();
             expect(ipfsUrl).to.equal(mockIpfsUrl);
 
             // Mock JSON parsing (in a real app, this would be fetched from Pinata)
@@ -183,7 +183,7 @@ describe("CharityDAO Contracts - Oracles", function () {
             await ngoOracle.connect(wallets.admin).approveNGO(newNGO, newIpfsUrl);
 
             expect(await ngoOracle.approvedNGOs(newNGO)).to.equal(true);
-            expect(await ngoOracle.getNGODetailsUrl()).to.equal(newIpfsUrl);
+            expect(await ngoOracle.getNGODetailsURL()).to.equal(newIpfsUrl);
             // CHANGED: Use wallets.admin
             await expect(ngoOracle.connect(wallets.admin).approveNGO(newNGO, newIpfsUrl)).to.be.revertedWith(
                 "NGO already approved"
@@ -206,7 +206,7 @@ describe("CharityDAO Contracts - Oracles", function () {
             await ngoOracle.connect(wallets.admin).revokeNGO(ngoAddress, newIpfsUrl);
 
             expect(await ngoOracle.approvedNGOs(ngoAddress)).to.equal(false);
-            expect(await ngoOracle.getNGODetailsUrl()).to.equal(newIpfsUrl);
+            expect(await ngoOracle.getNGODetailsURL()).to.equal(newIpfsUrl);
             // CHANGED: Use wallets.admin
             await expect(ngoOracle.connect(wallets.admin).revokeNGO(ngoAddress, newIpfsUrl)).to.be.revertedWith(
                 "NGO not approved"
@@ -225,16 +225,16 @@ describe("CharityDAO Contracts - Oracles", function () {
         it("Should allow ORACLE_ADMIN to update IPFS URL", async function () {
             const newIpfsUrl = "ipfs://QmTest4567890";
             // CHANGED: Use wallets.admin
-            const tx = await ngoOracle.connect(wallets.admin).updateNGODetailsUrl(newIpfsUrl);
+            const tx = await ngoOracle.connect(wallets.admin).updateNGODetailsURL(newIpfsUrl);
             await expect(tx).to.emit(ngoOracle, "NGOWhitelistUpdated").withArgs(newIpfsUrl, anyValue);
-            expect(await ngoOracle.getNGODetailsUrl()).to.equal(newIpfsUrl);
+            expect(await ngoOracle.getNGODetailsURL()).to.equal(newIpfsUrl);
         });
 
         it("Should revert updateNGODetailsUrl if not ORACLE_ADMIN", async function () {
             const newIpfsUrl = "ipfs://QmTest4567890";
             // This test remains valid
             await expect(
-                ngoOracle.connect(wallets.donor[0]).updateNGODetailsUrl(newIpfsUrl)
+                ngoOracle.connect(wallets.donor[0]).updateNGODetailsURL(newIpfsUrl)
             ).to.be.revertedWithCustomError(ngoOracle, "AccessControlUnauthorizedAccount");
         });
     });
@@ -247,61 +247,79 @@ describe("CharityDAO Contracts - Oracles", function () {
             expect(await proofOracle.hasRole(await proofOracle.ORACLE_ADMIN(), wallets.admin.address)).to.be.true;
         });
 
-        it("Should allow ORACLE_ADMIN to verify a milestone", async function () {
+    it("Should allow NGO to submit a proof and revert if NGO address is not valid", async function () {
+        const ngo = wallets.ngo[0].signer;
+        const milestonesDesc = ["Build school", "Purchase books"];
+        const milestonesAmt = [ethers.parseEther("1"), ethers.parseEther("2")];
+
+        // Create proposal
+        await proposalManager.connect(ngo).createProposal(milestonesDesc, milestonesAmt);
+        const proofUrl = "ipfs://QmProof123";
+
+        await expect(
+            proofOracle.connect(unverifiedNGO.signer).submitProof(1, 0, proofUrl)
+        ).to.be.revertedWith("NGO not approved");
+
+        const tx = await proofOracle.connect(ngo).submitProof(1, 0, proofUrl);
+        
+        await expect(tx)
+            .to.emit(proofOracle, "ProofSubmitted")
+            .withArgs(0, 1, 0, ngo.address); 
+        });
+
+        it("Should revert submitProof for invalid inputs", async function () {
             const ngo = wallets.ngo[0].signer;
-            // const totalFunds = ethers.parseEther("3");
+            const ngo1 = wallets.ngo[1].signer;
             const milestonesDesc = ["Build school", "Purchase books"];
             const milestonesAmt = [ethers.parseEther("1"), ethers.parseEther("2")];
 
             // Create proposal
             await proposalManager.connect(ngo).createProposal(milestonesDesc, milestonesAmt);
             const proofUrl = "ipfs://QmProof123";
+            const emptyUrl = "";
+            const invalidUrl = "https://something"
 
-            // Verify milestone
-            // CHANGED: Use wallets.admin
+            await expect(
+            proofOracle.connect(ngo).submitProof(1, 0, emptyUrl)
+                ).to.be.revertedWith("Empty URL");
+            await expect(
+                proofOracle.connect(ngo).submitProof(1, 0, invalidUrl)
+                ).to.be.revertedWith("Invalid IPFS URL");
+            await expect(
+                proofOracle.connect(ngo1).submitProof(1, 0, proofUrl)
+                ).to.be.revertedWith("NGO does not own this proposal");
+        });
+
+        it("Should allow ProofOracle to verify a proof", async function () {
+            const ngo = wallets.ngo[0].signer;
+            const milestonesDesc = ["Build school", "Purchase books"];
+            const milestonesAmt = [ethers.parseEther("1"), ethers.parseEther("2")];
+
+            // Create proposal
+            await proposalManager.connect(ngo).createProposal(milestonesDesc, milestonesAmt);
+            const proofUrl = "ipfs://QmProof123";
+            await proofOracle.connect(ngo).submitProof(1, 0, proofUrl);
+        
+            // Verify proof
             const tx = await proofOracle
                 .connect(wallets.admin) 
-                .verifyMilestone(1, 0, proofUrl, ngo.address);
+                .verifyProof(0, true, "valid proof");
             await expect(tx)
-                .to.emit(proofOracle, "MilestoneVerified")
-                .withArgs(1, 0, ethers.keccak256(ethers.toUtf8Bytes(proofUrl)), proofUrl, ngo.address);
+                .to.emit(proofOracle, "ProofAprroved")
+                .withArgs(0, true, "valid proof");
 
             const proposal = await proposalManager.getProposal(1);
             expect(proposal.milestones[0].verified).to.equal(true);
-            // expect(proposal.milestones[0].completed).to.equal(true);
-            // expect(proposal.milestones[0].proofHash).to.equal(ethers.keccak256(ethers.toUtf8Bytes(proofUrl)));
+            expect(proposal.milestones[0].proofHash).to.equal(ethers.keccak256(ethers.toUtf8Bytes(proofUrl)));
         });
 
-        it("Should revert verifyMilestone if not ORACLE_ROLE", async function () {
+        it("Should revert verifyProof if not ORACLE_ROLE", async function () {
             const ngo = wallets.ngo[0].signer;
             const proofUrl = "ipfs://QmProof123";
             // This test remains valid
             await expect(
-                proofOracle.connect(wallets.donor[0]).verifyMilestone(1, 0, proofUrl, ngo.address)
+                proofOracle.connect(wallets.donor[0]).verifyProof(0, true, "valid proof")
             ).to.be.revertedWithCustomError(proofOracle, "AccessControlUnauthorizedAccount");
-        });
-
-        it("Should revert verifyMilestone for unapproved NGO", async function () {
-            const unverifiedNGO = wallets.ngo[wallets.ngo.length - 1].signer;
-            const proofUrl = "ipfs://QmProof123";
-            // CHANGED: Use wallets.admin to perform the action
-            await expect(
-                proofOracle.connect(wallets.admin).verifyMilestone(1, 0, proofUrl, unverifiedNGO.address)
-            ).to.be.revertedWith("NGO not approved");
-        });
-
-        it("Should revert verifyMilestone for invalid inputs", async function () {
-            const ngo = wallets.ngo[0].signer;
-            // CHANGED: Use wallets.admin for all calls
-            await expect(
-                proofOracle.connect(wallets.admin).verifyMilestone(1, 0, "", ngo.address)
-            ).to.be.revertedWith("Proof URL cannot be empty");
-            await expect(
-                proofOracle.connect(wallets.admin).verifyMilestone(1, 0, "http://invalid", ngo.address)
-            ).to.be.revertedWith("Invalid IPFS URL format");
-            await expect(
-                proofOracle.connect(wallets.admin).verifyMilestone(1, 0, "ipfs://QmProof123", ethers.ZeroAddress)
-            ).to.be.revertedWith("Invalid NGO address");
         });
     });
 });

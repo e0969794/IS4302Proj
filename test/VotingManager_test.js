@@ -1,5 +1,6 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
+const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 
 describe("VotingManager", function () {
   let GovernanceToken, Treasury, ProposalManager, VotingManager;
@@ -157,7 +158,7 @@ describe("VotingManager", function () {
 
             await expect(
             votingManager.connect(donor1).vote(nonExistentProposalId, 5)
-            ).to.be.revertedWith("proposal does not exist");
+            ).to.be.revertedWith("Proposal not valid");
         });
 
         it("Should revert if zero votes", async function () {
@@ -213,7 +214,7 @@ describe("VotingManager", function () {
                     return null;
                 }
                 })
-                .filter((e) => e && e.name === "MilestoneUnlocked")[0];
+                .filter((e) => e && e.name === "DisburseMilestone")[0];
 
             expect(milestoneEvent).to.not.be.undefined;
             expect(milestoneEvent.args.proposalId).to.equal(testProposalId);
@@ -333,8 +334,76 @@ describe("VotingManager", function () {
             // Try to vote on proposal ID 1 (the original one from beforeEach, now expired/killed)
             await expect(
                 votingManager.connect(donor1).vote(proposalId, 5)
-            ).to.be.revertedWith("proposal no longer active");
+            ).to.be.revertedWith("Proposal not valid");
            
         });
     });
+    describe("Voting Logic and Milestone Progression", function() {
+        let testProposalId;
+        const testMilestoneAmts = [10, 20]; // M0 needs 10 votes, M1 needs 20
+
+        beforeEach(async function() {
+        // Create a specific proposal for these tests
+            const tx = await proposalManager.connect(ngo).createProposal(
+             ["Test M0", "Test M1"],
+             testMilestoneAmts
+            );
+             const receipt = await tx.wait();
+             const event = receipt.logs
+                .map(log => {
+             try { return proposalManager.interface.parseLog(log); } catch { return null; }
+             })
+             .filter(e => e && e.name === "ProposalCreated")[0];
+             testProposalId = event.args.proposalId;
+        });
+
+         it("Should allow voting on milestone 0 (no previous milestone to check)", async function() {
+             // Donor 1 has 100 credits, 5 votes costs 25
+             await expect(votingManager.connect(donor1).vote(testProposalId, 5))
+            .to.emit(votingManager, "VoteCast")
+            .withArgs(donor1.address, testProposalId, anyValue, 5);
+
+            expect(await votingManager.getProposalVotes(testProposalId)).to.equal(5);
+            expect(await votingManager.nextMilestoneMapping(testProposalId)).to.equal(0);
+            });
+
+        it("Should revert voting on milestone 1 if milestone 0 is released but NOT verified", async function() {
+        // 1. Fund milestone 0
+        // Donor 1 has 100 credits. 10 votes costs 10^2 = 100 credits.
+            await votingManager.connect(donor1).vote(testProposalId, 10);
+
+            // Check that milestone 0 was funded and state advanced
+            expect(await votingManager.nextMilestoneMapping(testProposalId)).to.equal(1);
+            expect(await proposalManager.getMilestoneReleaseStatus(testProposalId, 0)).to.be.true;
+
+            // 2. Check verification status (should be false, no oracle)
+            expect(await proposalManager.getMilestoneStatus(testProposalId, 0)).to.be.false;
+
+            await expect(
+            votingManager.connect(donor2).vote(testProposalId, 1)
+            ).to.be.revertedWith("Previous milestone released but not verified");
+        });
+
+        it("Should revert voting if proposal is fully funded", async function() {
+        // 1. Fund milestone 0 (needs 10 votes)
+        await votingManager.connect(donor1).vote(testProposalId, 10);
+
+        const tx = await proposalManager.connect(ngo).createProposal(["One Milestone"], [5]);
+        const receipt = await tx.wait();
+          const event = receipt.logs
+            .map(log => {
+                try { return proposalManager.interface.parseLog(log); } catch { return null; }
+            })
+            .filter(e => e && e.name === "ProposalCreated")[0];
+        const oneMilestoneId = event.args.proposalId;
+         // Fund the only milestone
+            await votingManager.connect(donor2).vote(oneMilestoneId, 5);
+            expect(await votingManager.nextMilestoneMapping(oneMilestoneId)).to.equal(1); // Now at index 1
+
+         // Try to vote again
+             await expect(
+             votingManager.connect(donor2).vote(oneMilestoneId, 1)
+             ).to.be.revertedWith("Proposal already fully funded");
+         });
+     });
 });

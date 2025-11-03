@@ -10,6 +10,7 @@ contract ProposalManager {
         string description;
         uint256 amount; //should be cumulative, if milestone 1 is 100, milestone 2 >=101
         bool verified;
+        bool released;
         bytes32 proofHash;
     }
 
@@ -83,6 +84,7 @@ contract ProposalManager {
                     description: milestoneDescriptions[i],
                     amount: milestoneAmounts[i],
                     verified: false,
+                    released: false,
                     proofHash: bytes32(0)
                 })
             );
@@ -173,5 +175,68 @@ contract ProposalManager {
             proofURL, proposals[proposalId].ngo);
 
         return true;
+    }
+
+    /**
+     * @notice Gets the verification status of a specific milestone
+     * @dev View function, returns true if verified, false otherwise
+     * @param proposalId ID of the target proposal
+     * @param milestoneIndex Index of the milestone within the proposal
+     * @return bool True if the milestone is verified, false otherwise
+     */
+    function getMilestoneStatus(uint256 proposalId, uint256 milestoneIndex) 
+        external 
+        view 
+        returns (bool) 
+    {
+        // 1. Check that the proposal ID is valid and the proposal is active
+        // (proposalId >= nextProposalId means it never existed)
+        // (proposals[proposalId].id == 0 means it was killed/inactive)
+        require(
+            proposalId < nextProposalId && proposals[proposalId].id != 0, 
+            "Proposal not found or inactive"
+        );
+
+        // 2. Check that the milestone index is within the array's bounds
+        require(
+            milestoneIndex < proposals[proposalId].milestones.length, 
+            "Invalid milestone index"
+        );
+
+        // 3. Return the 'verified' status
+        return proposals[proposalId].milestones[milestoneIndex].verified;
+    }
+
+    function updateMilestoneReleaseStatus(uint256 proposalId, uint256 milestoneIndex) external {
+        proposals[proposalId].milestones[milestoneIndex].released = true;
+    }
+
+    function getMilestoneReleaseStatus(uint256 proposalId, uint256 milestoneIndex) 
+        external 
+        view 
+        returns (bool) 
+    {
+        // 1. Check that the proposal ID is valid and the proposal is active
+        // (proposalId >= nextProposalId means it never existed)
+        // (proposals[proposalId].id == 0 means it was killed/inactive)
+        require(
+            proposalId < nextProposalId && proposals[proposalId].id != 0, 
+            "Proposal not found or inactive"
+        );
+
+        // 2. Check that the milestone index is within the array's bounds
+        require(
+            milestoneIndex < proposals[proposalId].milestones.length, 
+            "Invalid milestone index"
+        );
+
+        // 3. Return the 'released' status
+        return proposals[proposalId].milestones[milestoneIndex].released;
+    }
+
+    function proposalExists(uint256 proposalId) external view returns (bool) {
+        // Checks if ID is in range (less than nextProposalId)
+        // and if the proposal ID is not 0 (meaning it's active)
+        return (proposalId < nextProposalId && proposals[proposalId].id != 0);
     }
 }

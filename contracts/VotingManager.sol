@@ -25,6 +25,9 @@ interface IProposalManager {
     function getAllProposals() external view returns (Proposal[] memory);
     function killProposal(uint256 proposalId) external;
     function proposalExists(uint256 proposalId) external view returns (bool);
+    function getMilestoneStatus(uint256 proposalId, uint256 milestoneIndex) external view returns (bool);
+    function getMilestoneReleaseStatus(uint256 proposalId, uint256 milestoneIndex) external view returns (bool);
+    function updateMilestoneReleaseStatus(uint256 proposalId, uint256 milestoneIndex) external;
 }
 
 interface ITreasury {
@@ -44,7 +47,8 @@ contract VotingManager is AccessControl, ReentrancyGuard {
     mapping(uint256 => mapping(address => uint256)) public userVotes;
 
     event VoteCast(address indexed voter, uint256 indexed proposalId, bytes32 voteId, uint256 votes);
-    event MilestoneUnlocked(uint256 indexed proposalId, uint256 milestoneIndex, uint256 amountReleased);
+    event DisburseMilestone(uint256 indexed proposalId, uint256 milestoneIndex, uint256 amountReleased);
+    event MilestoneUnlocked(uint256 indexed proposalId, uint256 milestoneIndex);
 
     constructor(
         address admin,
@@ -61,7 +65,7 @@ contract VotingManager is AccessControl, ReentrancyGuard {
         return proposalVotesMapping[proposalId];
     }
 
-    function _updatProposalAfterVote(uint256 proposalId) internal {
+    function _updateProposalAfterVote(uint256 proposalId) internal {
         uint256 currVotes = proposalVotesMapping[proposalId];
         IProposalManager.Proposal memory p = proposalManager.getProposal(proposalId);
         uint nextMilestone = nextMilestoneMapping[proposalId];
@@ -73,12 +77,43 @@ contract VotingManager is AccessControl, ReentrancyGuard {
             } else {
                 tokenAmount = p.milestones[nextMilestone].amount;
             }
+            nextMilestoneMapping[proposalId]++;
             _disburseMilestoneFunds(payable (p.ngo), tokenAmount);
-            nextMilestoneMapping[proposalId]++;     
+            proposalManager.updateMilestoneReleaseStatus(proposalId, nextMilestone);
+            emit DisburseMilestone(proposalId, nextMilestone, tokenAmount);
+        }   
+    }
 
-            emit MilestoneUnlocked(proposalId, nextMilestone, tokenAmount);
+    /**
+     * @notice Modifier to check all voting conditions for the *next* milestone
+     * @dev Checks proposal validity, completion, and the rule:
+     * CANNOT VOTE if (prev milestone is released AND prev milestone is not verified)
+     */
+    modifier canVoteOnMilestone(uint256 proposalId) {
+        // 1. Get the current milestone index we are voting for.
+        uint256 nextMilestone = nextMilestoneMapping[proposalId];
+
+        // 2. Check if the proposal is valid (active)
+        require(_isProposalValid(proposalId), "Proposal not valid");
+
+        // 3. Check if the proposal is already complete
+        IProposalManager.Proposal memory p = proposalManager.getProposal(proposalId);
+        require(nextMilestone < p.milestones.length, "Proposal already fully funded");
+
+        // 4. Apply logic (only if we're past milestone 0)
+        if (nextMilestone > 0) {
+            uint256 prevMilestone = nextMilestone - 1;
+            
+            bool prevReleased = proposalManager.getMilestoneReleaseStatus(proposalId, prevMilestone);
+            bool prevVerified = proposalManager.getMilestoneStatus(proposalId, prevMilestone);
+
+            // This is the rule:
+            // Revert if: (Previous is Released) AND (Previous is NOT Verified)
+            require( !(prevReleased && !prevVerified), "Previous milestone released but not verified");
         }
         
+        // All checks passed, allow the function to execute
+        _;
     }
 
     function getNextMilestone(uint256 proposalId, uint256 currVotes) external view returns (uint) {
@@ -96,7 +131,7 @@ contract VotingManager is AccessControl, ReentrancyGuard {
         }
         return currIndex;
     }
-    function vote(uint256 proposalId, uint256 newVotes) external nonReentrant {
+    function vote(uint256 proposalId, uint256 newVotes) external nonReentrant canVoteOnMilestone(proposalId) {
         require(newVotes > 0, "Must cast at least 1 vote");
 
         bytes32 voteId = keccak256(abi.encode(msg.sender, block.number, newVotes)); 
@@ -113,7 +148,7 @@ contract VotingManager is AccessControl, ReentrancyGuard {
         //dont need to check if it doesnt exist because by default it is 0
         proposalVotesMapping[proposalId] += newVotes;
         emit VoteCast(msg.sender, proposalId, voteId, newVotes);
-        _updatProposalAfterVote(proposalId);
+        _updateProposalAfterVote(proposalId);
     }   
 
 
