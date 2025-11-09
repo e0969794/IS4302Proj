@@ -100,7 +100,7 @@ describe("Oracles", function () {
 
         // Deploy ProposalManager
         ProposalManager = await ethers.getContractFactory("ProposalManager");
-        proposalManager = await ProposalManager.deploy();
+        proposalManager = await ProposalManager.deploy(ngoOracle.target);
         await proposalManager.waitForDeployment();
 
         // Deploy ProofOracle
