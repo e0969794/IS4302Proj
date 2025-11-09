@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+interface INGOOracle {
+    function verifyNGO(address ngo) external returns (bool);
+}
+
 contract ProposalManager {
+    INGOOracle public immutable ngoOracle;
 
     address public proofOracle;
     uint256 public nextProposalId;
@@ -45,7 +50,8 @@ contract ProposalManager {
         string reason
     );
 
-    constructor() {
+    constructor(address _ngoOracle) {
+        ngoOracle = INGOOracle(_ngoOracle);
         nextProposalId = 1;
     }
 
@@ -69,8 +75,8 @@ contract ProposalManager {
             "Mismatched milestones"
         );
 
-        //add check to verify that msg.sender is whitelisted
-
+        require(ngoOracle.verifyNGO(msg.sender), "NGO address not approved");
+        
         uint256 proposalId = nextProposalId++;
 
         Proposal storage p = proposals[proposalId];

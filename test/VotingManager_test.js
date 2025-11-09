@@ -3,10 +3,10 @@ const { ethers } = require("hardhat");
 const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 
 describe("VotingManager", function () {
-  let GovernanceToken, Treasury, ProposalManager, VotingManager;
-  let govToken, treasury, proposalManager, votingManager;
+  let GovernanceToken, Treasury, ProposalManager, VotingManager, NGOOracle;
+  let govToken, treasury, proposalManager, votingManager, ngoOracle;
   let proposalId;
-  let admin, ngo, donor1, donor2, donor3;
+  let admin, donor1, donor2, donor3;
   const initialMintRate = 1; // 1 GOV per 1 ETH
 
   const milestonesDesc = ["Build school", "Purchase books", "Hire teachers"];
@@ -15,10 +15,39 @@ describe("VotingManager", function () {
     5,
     8,
   ];
+    // Wallets and Signers
+    let wallets = {
+        ngo: [],
+    };
+    // Mock Data
+    let ngoDetails = [
+        "Red Cross International - Humanitarian aid and disaster relief",
+        "Save the Children - Education and health programs for children",
+        "World Wildlife Fund - Environmental conservation and research",
+        "Global Health Corps - Improving healthcare access in underserved regions"
+    ];
+    let numNGOs = ngoDetails.length;
+    let mockIpfsUrl = "ipfs://QmTest1234567890"; // Mock IPFS URL for JSON whitelist
+
+  before(async function () {
+    const accounts = await ethers.getSigners();
+    wallets.ngo = []; // Initialize ngo array
+    for (let i = 0; i <= numNGOs; i++) {
+             wallets.ngo.push({
+                 signer: accounts[i],
+             });
+        }
+    });
 
   beforeEach(async function () {
     // Get Signers
-    [admin, ngo, donor1, donor2, donor3] = await ethers.getSigners();
+    [admin, donor1, donor2, donor3] = await ethers.getSigners();
+    
+    // Deploy NGOOracle
+    const ngoAddresses = wallets.ngo.slice(0, numNGOs - 1).map((w) => w.signer.address);
+    NGOOracle = await ethers.getContractFactory("NGOOracle");
+    ngoOracle = await NGOOracle.deploy(ngoAddresses, mockIpfsUrl);
+    await ngoOracle.waitForDeployment();
 
     // Deploy GovernanceToken
     GovernanceToken = await ethers.getContractFactory("GovernanceToken");
@@ -36,7 +65,7 @@ describe("VotingManager", function () {
 
     // Deploy ProposalManager
     ProposalManager = await ethers.getContractFactory("ProposalManager");
-    proposalManager = await ProposalManager.deploy();
+    proposalManager = await ProposalManager.deploy(ngoOracle.target);
     await proposalManager.waitForDeployment();
 
     // Deploy VotingManager
@@ -55,6 +84,7 @@ describe("VotingManager", function () {
     await treasury.connect(admin).grantRole(DISBURSER_ROLE, votingManager.target);
 
     // Create a Proposal
+    const ngo = wallets.ngo[0].signer;
     const tx = await proposalManager.connect(ngo).createProposal(milestonesDesc, milestonesAmt);
     const receipt = await tx.wait();
 
@@ -184,7 +214,7 @@ describe("VotingManager", function () {
                 2,
                 4, 
             ];
-
+            const ngo = wallets.ngo[0].signer;
             const tx = await proposalManager.connect(ngo).createProposal(
                 testMilestonesDesc,
                 testMilestonesAmt
@@ -230,6 +260,7 @@ describe("VotingManager", function () {
         it("Should disburse milestone funds to NGO when votes reach threshold", async function () {
             const desc = ["Milestone 1"];
             const amt = [2]; // small target for test
+            const ngo = wallets.ngo[0].signer;
             const tx = await proposalManager.connect(ngo).createProposal(desc, amt);
             const receipt = await tx.wait();
             const event = receipt.logs
@@ -262,6 +293,7 @@ describe("VotingManager", function () {
         it("Should allow oracle to kill proposal after expiry and mark it invalid", async function () {
             const milestoneDesc = ["Build library"];
             const milestoneAmt = [ethers.parseEther("5")];
+            const ngo = wallets.ngo[0].signer;
             const createTx = await proposalManager.connect(ngo).createProposal(milestoneDesc, milestoneAmt);
             await createTx.wait();
 
@@ -293,6 +325,7 @@ describe("VotingManager", function () {
             const milestoneAmt2 = [ethers.parseEther("6")];
             const milestoneDesc1 = ["Construct classroom"];
             const milestoneAmt1 = [ethers.parseEther("10")];
+            const ngo = wallets.ngo[0].signer;
             await proposalManager.connect(ngo).createProposal(milestoneDesc1, milestoneAmt1);
 
 
@@ -322,6 +355,7 @@ describe("VotingManager", function () {
             const milestoneAmt2 = [ethers.parseEther("6")];
             const milestoneDesc1 = ["Construct classroom"];
             const milestoneAmt1 = [ethers.parseEther("10")];
+            const ngo = wallets.ngo[0].signer;
             await proposalManager.connect(ngo).createProposal(milestoneDesc1, milestoneAmt1);
 
 
@@ -344,6 +378,7 @@ describe("VotingManager", function () {
 
         beforeEach(async function() {
         // Create a specific proposal for these tests
+            const ngo = wallets.ngo[0].signer;
             const tx = await proposalManager.connect(ngo).createProposal(
              ["Test M0", "Test M1"],
              testMilestoneAmts
@@ -387,7 +422,7 @@ describe("VotingManager", function () {
         it("Should revert voting if proposal is fully funded", async function() {
         // 1. Fund milestone 0 (needs 10 votes)
         await votingManager.connect(donor1).vote(testProposalId, 10);
-
+        const ngo = wallets.ngo[0].signer;
         const tx = await proposalManager.connect(ngo).createProposal(["One Milestone"], [5]);
         const receipt = await tx.wait();
           const event = receipt.logs
