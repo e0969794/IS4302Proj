@@ -2,14 +2,20 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
 describe("VotingManager - Reputation-Based Quadratic Voting", function () {
-  let GovernanceToken, Treasury, ProposalManager, VotingManager;
-  let govToken, treasury, proposalManager, votingManager;
+  let GovernanceToken, Treasury, ProposalManager, VotingManager, NGOOracle;
+  let govToken, treasury, proposalManager, votingManager, ngoOracle;
   let admin, ngo, voter1, voter2, voter3;
   const initialMintRate = 1; // 1 GOV per 1 ETH
+  const mockIpfsUrl = "ipfs://QmTest1234567890";
 
   beforeEach(async function () {
     // Get Signers
     [admin, ngo, voter1, voter2, voter3] = await ethers.getSigners();
+
+    // Deploy NGOOracle with the ngo address
+    NGOOracle = await ethers.getContractFactory("NGOOracle");
+    ngoOracle = await NGOOracle.deploy([ngo.address], mockIpfsUrl);
+    await ngoOracle.waitForDeployment();
 
     // Deploy GovernanceToken
     GovernanceToken = await ethers.getContractFactory("GovernanceToken");
@@ -29,9 +35,9 @@ describe("VotingManager - Reputation-Based Quadratic Voting", function () {
     const TREASURY_ROLE = await govToken.TREASURY_ROLE();
     await govToken.connect(admin).grantRole(TREASURY_ROLE, treasury.target);
 
-    // Deploy ProposalManager
+    // Deploy ProposalManager with NGOOracle
     ProposalManager = await ethers.getContractFactory("ProposalManager");
-    proposalManager = await ProposalManager.deploy();
+    proposalManager = await ProposalManager.deploy(ngoOracle.target);
     await proposalManager.waitForDeployment();
 
     // Deploy VotingManager

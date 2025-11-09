@@ -3,18 +3,57 @@ const { ethers } = require("hardhat");
 const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 
 describe("VotingManager", function () {
-  let GovernanceToken, Treasury, ProposalManager, VotingManager;
-  let govToken, treasury, proposalManager, votingManager;
+  let GovernanceToken, Treasury, ProposalManager, VotingManager, NGOOracle;
+  let govToken, treasury, proposalManager, votingManager, ngoOracle;
   let proposalId;
-  let admin, ngo, donor1, donor2, donor3;
+  let admin, donor1, donor2, donor3;
   const initialMintRate = 1; // 1 GOV per 1 ETH
 
   const milestonesDesc = ["Build school", "Purchase books", "Hire teachers"];
   const milestonesAmt = [10, 5, 8];
 
+  // Wallets and Signers
+  let wallets = {
+    ngo: [],
+  };
+
+  // Mock Data
+  let ngoDetails = [
+    "Red Cross International - Humanitarian aid and disaster relief",
+    "Save the Children - Education and health programs for children",
+    "World Wildlife Fund - Environmental conservation and research",
+    "Global Health Corps - Improving healthcare access in underserved regions",
+  ];
+  let numNGOs = ngoDetails.length;
+  let mockIpfsUrl = "ipfs://QmTest1234567890"; // Mock IPFS URL for JSON whitelist
+
+  before(async function () {
+    const accounts = await ethers.getSigners();
+    // Reserve first account for admin, then numNGOs accounts for NGOs, then donors
+    // accounts[0] = admin
+    // accounts[1-4] = NGOs (numNGOs = 4)
+    // accounts[5-7] = donors
+    wallets.ngo = []; // Initialize ngo array
+    for (let i = 0; i < numNGOs; i++) {
+      wallets.ngo.push({
+        signer: accounts[i + 1], // Start from index 1 (skip admin at 0)
+      });
+    }
+  });
+
   beforeEach(async function () {
-    // Get Signers
-    [admin, ngo, donor1, donor2, donor3] = await ethers.getSigners();
+    // Get Signers - use indices after NGOs to avoid conflicts
+    const accounts = await ethers.getSigners();
+    admin = accounts[0];
+    donor1 = accounts[numNGOs + 1]; // After all NGOs
+    donor2 = accounts[numNGOs + 2];
+    donor3 = accounts[numNGOs + 3];
+
+    // Deploy NGOOracle with first 3 NGOs (leaving one unverified for testing)
+    const ngoAddresses = wallets.ngo.slice(0, 3).map((w) => w.signer.address);
+    NGOOracle = await ethers.getContractFactory("NGOOracle");
+    ngoOracle = await NGOOracle.deploy(ngoAddresses, mockIpfsUrl);
+    await ngoOracle.waitForDeployment();
 
     // Deploy GovernanceToken
     GovernanceToken = await ethers.getContractFactory("GovernanceToken");
@@ -36,7 +75,7 @@ describe("VotingManager", function () {
 
     // Deploy ProposalManager
     ProposalManager = await ethers.getContractFactory("ProposalManager");
-    proposalManager = await ProposalManager.deploy();
+    proposalManager = await ProposalManager.deploy(ngoOracle.target);
     await proposalManager.waitForDeployment();
 
     // Deploy VotingManager
@@ -56,7 +95,8 @@ describe("VotingManager", function () {
       .connect(admin)
       .grantRole(DISBURSER_ROLE, votingManager.target);
 
-    // Create a Proposal
+    // Create a Proposal using verified NGO
+    const ngo = wallets.ngo[0].signer;
     const tx = await proposalManager
       .connect(ngo)
       .createProposal(milestonesDesc, milestonesAmt);
@@ -215,6 +255,7 @@ describe("VotingManager", function () {
       const testMilestonesDesc = ["Test milestone 1", "Test milestone 2"];
       const testMilestonesAmt = [2, 4];
 
+      const ngo = wallets.ngo[0].signer;
       const tx = await proposalManager
         .connect(ngo)
         .createProposal(testMilestonesDesc, testMilestonesAmt);
@@ -263,6 +304,7 @@ describe("VotingManager", function () {
     it("Should disburse milestone funds to NGO when votes reach threshold", async function () {
       const desc = ["Milestone 1"];
       const amt = [2]; // small target for test
+      const ngo = wallets.ngo[0].signer;
       const tx = await proposalManager.connect(ngo).createProposal(desc, amt);
       const receipt = await tx.wait();
       const event = receipt.logs
@@ -295,6 +337,7 @@ describe("VotingManager", function () {
     it("Should allow oracle to kill proposal after expiry and mark it invalid", async function () {
       const milestoneDesc = ["Build library"];
       const milestoneAmt = [ethers.parseEther("5")];
+      const ngo = wallets.ngo[0].signer;
       const createTx = await proposalManager
         .connect(ngo)
         .createProposal(milestoneDesc, milestoneAmt);
@@ -327,6 +370,7 @@ describe("VotingManager", function () {
       const milestoneAmt2 = [ethers.parseEther("6")];
       const milestoneDesc1 = ["Construct classroom"];
       const milestoneAmt1 = [ethers.parseEther("10")];
+      const ngo = wallets.ngo[0].signer;
       await proposalManager
         .connect(ngo)
         .createProposal(milestoneDesc1, milestoneAmt1);
@@ -360,6 +404,7 @@ describe("VotingManager", function () {
       const milestoneAmt2 = [ethers.parseEther("6")];
       const milestoneDesc1 = ["Construct classroom"];
       const milestoneAmt1 = [ethers.parseEther("10")];
+      const ngo = wallets.ngo[0].signer;
       await proposalManager
         .connect(ngo)
         .createProposal(milestoneDesc1, milestoneAmt1);
@@ -380,12 +425,167 @@ describe("VotingManager", function () {
       ).to.be.revertedWith("Proposal not valid");
     });
   });
+
+  describe("NGO Verification and Proposal Creation", function () {
+    it("Should allow verified NGO to create proposal", async function () {
+      const verifiedNGO = wallets.ngo[0].signer;
+      const milestoneDesc = ["Build community center"];
+      const milestoneAmt = [10];
+
+      // Verify NGO is approved
+      const isApproved = await ngoOracle.approvedNGOs(verifiedNGO.address);
+      expect(isApproved).to.be.true;
+
+      // Create proposal
+      await expect(
+        proposalManager
+          .connect(verifiedNGO)
+          .createProposal(milestoneDesc, milestoneAmt)
+      ).to.emit(proposalManager, "ProposalCreated");
+    });
+
+    it("Should revert when non-verified NGO tries to create proposal", async function () {
+      // Use an account that's not in the verified list
+      const unverifiedNGO = donor1; // donor1 is not an NGO
+      const milestoneDesc = ["Fake project"];
+      const milestoneAmt = [5];
+
+      // Verify this address is NOT approved
+      const isApproved = await ngoOracle.approvedNGOs(unverifiedNGO.address);
+      expect(isApproved).to.be.false;
+
+      // Attempt to create proposal should revert
+      await expect(
+        proposalManager
+          .connect(unverifiedNGO)
+          .createProposal(milestoneDesc, milestoneAmt)
+      ).to.be.revertedWith("NGO address not approved");
+    });
+
+    it("Should revert when revoked NGO tries to create proposal", async function () {
+      // First, approve a new NGO
+      const newNGO = donor3;
+      const newIpfsUrl = "ipfs://QmNewTest123";
+
+      await ngoOracle.connect(admin).approveNGO(newNGO.address, newIpfsUrl);
+
+      // Verify it's approved
+      let isApproved = await ngoOracle.approvedNGOs(newNGO.address);
+      expect(isApproved).to.be.true;
+
+      // Now revoke the NGO
+      const revokeIpfsUrl = "ipfs://QmRevokeTest456";
+      await ngoOracle.connect(admin).revokeNGO(newNGO.address, revokeIpfsUrl);
+
+      // Verify it's no longer approved
+      isApproved = await ngoOracle.approvedNGOs(newNGO.address);
+      expect(isApproved).to.be.false;
+
+      // Attempt to create proposal should revert
+      await expect(
+        proposalManager.connect(newNGO).createProposal(["Test"], [5])
+      ).to.be.revertedWith("NGO address not approved");
+    });
+
+    it("Should allow multiple verified NGOs to create proposals", async function () {
+      const ngo1 = wallets.ngo[0].signer;
+      const ngo2 = wallets.ngo[1].signer;
+
+      // Both should be verified
+      expect(await ngoOracle.approvedNGOs(ngo1.address)).to.be.true;
+      expect(await ngoOracle.approvedNGOs(ngo2.address)).to.be.true;
+
+      // Both should be able to create proposals
+      const tx1 = await proposalManager
+        .connect(ngo1)
+        .createProposal(["NGO1 Project"], [5]);
+      const receipt1 = await tx1.wait();
+      const event1 = receipt1.logs
+        .map((log) => {
+          try {
+            return proposalManager.interface.parseLog(log);
+          } catch {
+            return null;
+          }
+        })
+        .filter((e) => e && e.name === "ProposalCreated")[0];
+      expect(event1).to.not.be.undefined;
+
+      const tx2 = await proposalManager
+        .connect(ngo2)
+        .createProposal(["NGO2 Project"], [8]);
+      const receipt2 = await tx2.wait();
+      const event2 = receipt2.logs
+        .map((log) => {
+          try {
+            return proposalManager.interface.parseLog(log);
+          } catch {
+            return null;
+          }
+        })
+        .filter((e) => e && e.name === "ProposalCreated")[0];
+      expect(event2).to.not.be.undefined;
+
+      // Verify different proposal IDs
+      expect(event1.args.proposalId).to.not.equal(event2.args.proposalId);
+    });
+
+    it("Should emit NGOVerified event when verified NGO creates proposal", async function () {
+      const verifiedNGO = wallets.ngo[0].signer;
+
+      // The verifyNGO function is called and emits event
+      await expect(ngoOracle.verifyNGO(verifiedNGO.address))
+        .to.emit(ngoOracle, "NGOVerified")
+        .withArgs(verifiedNGO.address, anyValue);
+    });
+
+    it("Should emit NGORejected event when unverified address is checked", async function () {
+      const unverifiedAddress = donor1.address;
+
+      await expect(ngoOracle.verifyNGO(unverifiedAddress))
+        .to.emit(ngoOracle, "NGORejected")
+        .withArgs(unverifiedAddress, anyValue);
+    });
+
+    it("Should maintain NGO whitelist integrity after multiple operations", async function () {
+      const ngo1 = wallets.ngo[0].signer;
+      const ngo2 = wallets.ngo[1].signer;
+      const newNGO = donor3;
+
+      // Check initial state
+      expect(await ngoOracle.approvedNGOs(ngo1.address)).to.be.true;
+      expect(await ngoOracle.approvedNGOs(ngo2.address)).to.be.true;
+      expect(await ngoOracle.approvedNGOs(newNGO.address)).to.be.false;
+
+      // Approve new NGO
+      await ngoOracle
+        .connect(admin)
+        .approveNGO(newNGO.address, "ipfs://QmApprove123");
+      expect(await ngoOracle.approvedNGOs(newNGO.address)).to.be.true;
+
+      // Original NGOs should still be approved
+      expect(await ngoOracle.approvedNGOs(ngo1.address)).to.be.true;
+      expect(await ngoOracle.approvedNGOs(ngo2.address)).to.be.true;
+
+      // Revoke one NGO
+      await ngoOracle
+        .connect(admin)
+        .revokeNGO(ngo2.address, "ipfs://QmRevoke456");
+      expect(await ngoOracle.approvedNGOs(ngo2.address)).to.be.false;
+
+      // Others should remain unchanged
+      expect(await ngoOracle.approvedNGOs(ngo1.address)).to.be.true;
+      expect(await ngoOracle.approvedNGOs(newNGO.address)).to.be.true;
+    });
+  });
+
   describe("Voting Logic and Milestone Progression", function () {
     let testProposalId;
     const testMilestoneAmts = [10, 20]; // M0 needs 10 votes, M1 needs 20
 
     beforeEach(async function () {
       // Create a specific proposal for these tests
+      const ngo = wallets.ngo[0].signer;
       const tx = await proposalManager
         .connect(ngo)
         .createProposal(["Test M0", "Test M1"], testMilestoneAmts);
@@ -439,6 +639,7 @@ describe("VotingManager", function () {
       // 1. Fund milestone 0 (needs 10 votes)
       await votingManager.connect(donor1).vote(testProposalId, 10);
 
+      const ngo = wallets.ngo[0].signer;
       const tx = await proposalManager
         .connect(ngo)
         .createProposal(["One Milestone"], [5]);
