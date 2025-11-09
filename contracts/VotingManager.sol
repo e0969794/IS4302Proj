@@ -123,15 +123,15 @@ contract VotingManager is AccessControl, ReentrancyGuard {
         require(_isProposalValid(proposalId), "proposal not valid");
         IProposalManager.Proposal memory p = proposalManager.getProposal(proposalId);
 
-        uint currIndex = 0;
-        while (currIndex < p.milestones.length) {
-            if (currVotes > p.milestones[currIndex].amount) {
-                currIndex++;
-            } else {
-                return currIndex;
+        uint256 cumulative = 0;
+        for (uint256 i = 0; i < p.milestones.length; ) {
+            cumulative += p.milestones[i].amount;
+            if (currVotes < cumulative) {
+                return i;
             }
+        unchecked { ++i; }
         }
-        return currIndex;
+        return p.milestones.length;
     }
     function vote(uint256 proposalId, uint256 newVotes) external nonReentrant canVoteOnMilestone(proposalId) {
         require(newVotes > 0, "Must cast at least 1 vote");
