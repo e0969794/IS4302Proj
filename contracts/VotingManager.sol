@@ -120,17 +120,19 @@ contract VotingManager is AccessControl, ReentrancyGuard {
     }
 
     function _updateProposalAfterVote(uint256 proposalId) internal {
-        uint256 currVotes = proposalVotesMapping[proposalId];
+        uint256 currVotes = proposalVotesMapping[proposalId]; // Total votes
         IProposalManager.Proposal memory p = proposalManager.getProposal(proposalId);
-        uint nextMilestone = nextMilestoneMapping[proposalId];
-        if (currVotes >= p.milestones[nextMilestone].amount) { //strict assumption that there milestones are hit one at a time 
-            //calculate tokens needed (curr amount - prev amount)
+        uint256 nextMilestone = nextMilestoneMapping[proposalId];
+
+        uint256 nextMilestoneVotes;
+        for (uint256 i = 0; i <= nextMilestone; i++) {
+            nextMilestoneVotes += p.milestones[i].amount;
+        }
+
+        if (currVotes >= nextMilestoneVotes) { //strict assumption that there milestones are hit one at a time 
             uint256 tokenAmount;
-            if (nextMilestone > 0) {
-                tokenAmount = p.milestones[nextMilestone].amount - p.milestones[nextMilestone-1].amount;
-            } else {
-                tokenAmount = p.milestones[nextMilestone].amount;
-            }
+            tokenAmount = p.milestones[nextMilestone].amount;
+
             nextMilestoneMapping[proposalId]++;
             _disburseMilestoneFunds(payable (p.ngo), tokenAmount);
             proposalManager.updateMilestoneReleaseStatus(proposalId, nextMilestone);
@@ -175,15 +177,15 @@ contract VotingManager is AccessControl, ReentrancyGuard {
         require(_isProposalValid(proposalId), "proposal not valid");
         IProposalManager.Proposal memory p = proposalManager.getProposal(proposalId);
 
-        uint currIndex = 0;
-        while (currIndex < p.milestones.length) {
-            if (currVotes > p.milestones[currIndex].amount) {
-                currIndex++;
-            } else {
-                return currIndex;
+        uint256 cumulative = 0;
+        for (uint256 i = 0; i < p.milestones.length; ) {
+            cumulative += p.milestones[i].amount;
+            if (currVotes < cumulative) {
+                return i;
             }
+        unchecked { ++i; }
         }
-        return currIndex;
+        return p.milestones.length;
     }
     /**
      * @notice Calculate the modified quadratic cost with reputation-based discount
