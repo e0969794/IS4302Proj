@@ -5,9 +5,13 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 // NGOOracle contract for managing and verifying approved NGOs in the charity DAO
 contract NGOOracle is AccessControl {
+    // Admin who can approve/revoke NGOs and set IPFS URLs
+    // Assign to a multi-sig wallet (e.g. Gnosis Safe) for decentralized control
+    bytes32 public constant ORACLE_ADMIN = keccak256("ORACLE_ADMIN");
+
     // Mapping to track whether an address is an approved NGO
     mapping(address => bool) public approvedNGOs;
-    // Single IPFS URL (e.g. ipfs://<CID>) pointing to a JSON file with all NGO details
+    // Single IPFS URL (e.g., ipfs://<CID>) pointing to a JSON file with all NGO details
     // JSON format:
     // {"ngos":[{"address":"0xNGO1",
     // "name":"NGO1","description":"Charity","registrationId":"123"},...]}
@@ -38,8 +42,8 @@ contract NGOOracle is AccessControl {
         }
 
         // Temporary grant admin role to deployer (transfer to multi-sig post-deployment)
-        // Admin who can approve/revoke NGOs and set IPFS URLs
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(ORACLE_ADMIN, msg.sender);
 
         // Approve NGOs and set IPFS URL
         for (uint256 i = 0; i < ngoAddresses.length; i++) {
@@ -87,12 +91,12 @@ contract NGOOracle is AccessControl {
 
     /**
      * @notice Approves a new NGO and updates the IPFS JSON URL
-     * @dev Only callable by DEFAULT_ADMIN_ROLE
+     * @dev Only callable by ORACLE_ADMIN (recommended: multi-sig wallet)
      *      Admin must upload a new JSON file to Pinata including the new NGO
      * @param ngo Address of the NGO to approve
      * @param ipfsURL New IPFS URL for the updated JSON file
      */
-    function approveNGO(address ngo, string memory ipfsURL) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function approveNGO(address ngo, string memory ipfsURL) external onlyRole(ORACLE_ADMIN) {
         require(ngo != address(0), "Invalid NGO address");
         require(!approvedNGOs[ngo], "NGO already approved");
         require(bytes(ipfsURL).length > 0, "Empty IPFS URL");
@@ -106,12 +110,12 @@ contract NGOOracle is AccessControl {
 
     /**
      * @notice Revokes an NGO's approval and updates the IPFS JSON URL
-     * @dev Only callable by DEFAULT_ADMIN_ROLE
+     * @dev Only callable by ORACLE_ADMIN (recommended: multi-sig wallet)
      *      Admin must upload a new JSON file to Pinata excluding the revoked NGO
      * @param ngo Address of the NGO to revoke
      * @param ipfsURL New IPFS URL for the updated JSON file
      */
-    function revokeNGO(address ngo, string memory ipfsURL) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function revokeNGO(address ngo, string memory ipfsURL) external onlyRole(ORACLE_ADMIN) {
         require(ngo != address(0), "Invalid NGO address");
         require(approvedNGOs[ngo], "NGO not approved");
         require(bytes(ipfsURL).length > 0, "Empty IPFS URL");
@@ -125,11 +129,11 @@ contract NGOOracle is AccessControl {
 
     /**
      * @notice Updates the IPFS JSON URL without changing approvals
-     * @dev Only callable by DEFAULT_ADMIN_ROLE
+     * @dev Only callable by ORACLE_ADMIN (recommended: multi-sig wallet)
      *      Useful for updating NGO details without changing the whitelist
      * @param ipfsURL New IPFS URL for the JSON file
      */
-    function updateNGODetailsURL(string memory ipfsURL) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function updateNGODetailsURL(string memory ipfsURL) external onlyRole(ORACLE_ADMIN) {
         require(bytes(ipfsURL).length > 0, "Empty IPFS URL");
         require(isValidIPFSURL(ipfsURL), "Invalid IPFS URL format");
         ngoDetailsURL = ipfsURL;
@@ -138,7 +142,7 @@ contract NGOOracle is AccessControl {
 
     /**
      * @notice Retrieves the IPFS URL for the JSON file containing all NGO details
-     * @return The IPFS URL (e.g. ipfs://<CID>)
+     * @return The IPFS URL (e.g., ipfs://<CID>)
      */
     function getNGODetailsURL() external view returns (string memory) {
         return ngoDetailsURL;

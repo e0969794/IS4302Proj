@@ -2,7 +2,6 @@
 pragma solidity ^0.8.24;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/utils/Strings.sol";
 
 interface IProposalManager {
     function verifyMilestone(uint256 proposalId, uint256 milestoneIndex,
@@ -16,6 +15,9 @@ interface INGOOracle {
 
 // ProofOracle contract for verifying milestones using IPFS proofs uploaded via Pinata
 contract ProofOracle is AccessControl {
+    // Admin who can approve/revoke NGOs and set IPFS URLs
+    bytes32 public constant ORACLE_ADMIN = keccak256("ORACLE_ADMIN");
+
     // Immutable references to core contracts
     IProposalManager public immutable proposalManager;
     INGOOracle public immutable ngoOracle;
@@ -34,10 +36,8 @@ contract ProofOracle is AccessControl {
 
     // Mapping of submission ID → proof data
     mapping(uint256 => ProofSubmission) public proofs;
-    // Composite key → proofId
-    mapping(bytes32 => uint256) public proofIndex;
     // Counter for generating next submission IDs (starts at 0)
-    uint256 public nextProofId;
+    uint256 public proofCount;
 
     // Emitted when an NGO submits a new proof
     event ProofSubmitted(
@@ -49,7 +49,7 @@ contract ProofOracle is AccessControl {
 
     // Emitted when admin records its decision
     event ProofAprroved(
-        uint256 indexed proofId,
+        uint256 indexed submissionId,
         bool approved,
         string reason
     );
@@ -65,17 +65,10 @@ contract ProofOracle is AccessControl {
         require(_ngoOracle != address(0), "Invalid NGOOracle address");
         proposalManager = IProposalManager(_proposalManager);
         ngoOracle = INGOOracle(_ngoOracle);
-        nextProofId = 1;
 
         // Temporary grant admin role to deployer (transfer to multi-sig in future works)
-        // Admin who can approve/reject proofs for milestones
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-    }
-
-    // Create a hash to act as a composite key
-    function getKey(uint256 proposalId, uint256 milestoneIndex, address ngo)
-    internal pure returns (bytes32) {
-        return keccak256(abi.encodePacked(proposalId, milestoneIndex, ngo));
+        _grantRole(ORACLE_ADMIN, msg.sender);
     }
 
     /**
@@ -114,21 +107,8 @@ contract ProofOracle is AccessControl {
             "NGO does not own this proposal"
         );
 
-        bytes32 key = getKey(proposalId, milestoneIndex, msg.sender);
-
-        // Check if there's an existing proof
-        uint256 existingProofId = proofIndex[key];
-        if (existingProofId != 0) {
-            ProofSubmission storage existingProof = proofs[existingProofId];
-            // Allow resubmission only if previous proof was rejected
-            require(
-                existingProof.processed && !existingProof.approved,
-                "Proof already submitted or approved"
-            );
-        }
-
-        uint256 proofId = nextProofId++;
-        proofs[proofId] = ProofSubmission({
+        uint256 submissionId = proofCount++;
+        proofs[submissionId] = ProofSubmission({
             proposalId: proposalId,
             milestoneIndex: milestoneIndex,
             proofURL: proofURL,
@@ -139,23 +119,22 @@ contract ProofOracle is AccessControl {
             reason: ""
         });
 
-        proofIndex[key] = proofId;
-        emit ProofSubmitted(proofId, proposalId, milestoneIndex, msg.sender);
+        emit ProofSubmitted(submissionId, proposalId, milestoneIndex, msg.sender);
 
-        return proofId;
+        return submissionId;
     }
 
      /**
      * @notice Verifies a milestone by hashing the full IPFS URL and calling ProposalManager
      * @dev Only ORACLE_ADMIN can call
      *      If approved, calls ProposalManager to verify milestone
-     * @param proofId ID of the submission to process
+     * @param submissionId ID of the submission to process
      * @param approved Admin's decision on proof validity
      * @param reason Human-readable explanation
      */
-    function verifyProof(uint256 proofId, bool approved, string calldata reason)
-        external onlyRole(DEFAULT_ADMIN_ROLE) {
-        ProofSubmission storage sub = proofs[proofId];
+    function verifyProof(uint256 submissionId, bool approved, string calldata reason)
+        external onlyRole(ORACLE_ADMIN) {
+        ProofSubmission storage sub = proofs[submissionId];
         require(sub.submittedAt != 0, "Not found");
         require(!sub.processed, "Processed");
 
@@ -163,7 +142,7 @@ contract ProofOracle is AccessControl {
         sub.approved = approved;
         sub.reason = reason;
 
-        emit ProofAprroved(proofId, approved, reason);
+        emit ProofAprroved(submissionId, approved, reason);
         
         if (approved) {
             // Call ProposalManager to verify the milestone
@@ -181,14 +160,13 @@ contract ProofOracle is AccessControl {
     }
 
     /**
-     * @notice Returns full details of a proof
-     * @param proofId ID to query
+     * @notice Returns full details of a submission
+     * @param submissionId ID to query
      * @return ProofSubmission struct
      */
-    function getProof(uint256 proofId) external view
+    function getSubmission(uint256 submissionId) external view
         returns (ProofSubmission memory) {
-        require(proofId != 0 && proofId < nextProofId, "proof does not exist");
-        return proofs[proofId];
+        return proofs[submissionId];
     }
 
     /**
@@ -196,7 +174,7 @@ contract ProofOracle is AccessControl {
      * @return count Number of submissions awaiting verification
      */
     function pendingCount() external view returns (uint256 count) {
-        for (uint256 i = 1; i < nextProofId; i++) {
+        for (uint256 i = 0; i < proofCount; i++) {
             if (!proofs[i].processed) count++;
         }
     }

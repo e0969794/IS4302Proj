@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+interface INGOOracle {
+    function verifyNGO(address ngo) external returns (bool);
+}
 
 contract ProposalManager {
+    INGOOracle public immutable ngoOracle;
+
     address public proofOracle;
     uint256 public nextProposalId;
 
@@ -10,6 +15,7 @@ contract ProposalManager {
         string description;
         uint256 amount; //should be cumulative, if milestone 1 is 100, milestone 2 >=101
         bool verified;
+        bool released;
         bytes32 proofHash;
     }
 
@@ -17,6 +23,7 @@ contract ProposalManager {
         uint256 id; //0 means not active (expired/completed)
         address ngo;
         Milestone[] milestones;
+        uint256 creation_date;
     }
 
     // proposalId -> proposalAddress
@@ -40,9 +47,27 @@ contract ProposalManager {
     );
 
     event ProposalCreated(uint256 indexed proposalId, address ngo);
+    event ProposalKilled(uint256 indexed proposalId, address ngo);
 
-    //dont need to grant role because there isnt any permissions involved for this contract's operations. i dont think we need to grant admin
-    constructor() {
+
+    // Event emitted when a milestone is verified
+    event MilestoneVerified(
+        uint256 indexed proposalId,
+        uint256 indexed milestoneIndex,
+        bytes32 proofHash,
+        string proofURL,
+        address ngo
+    );
+    // Event emitted when a milestone is rejected
+    event MilestoneRejected(
+        uint256 indexed proposalId,
+        uint256 indexed milestoneIndex,
+        address ngo,
+        string reason
+    );
+
+    constructor(address _ngoOracle) {
+        ngoOracle = INGOOracle(_ngoOracle);
         nextProposalId = 1;
     }
 
@@ -66,13 +91,14 @@ contract ProposalManager {
             "Mismatched milestones"
         );
 
-        //add check to verify that msg.sender is whitelisted
-
+        require(ngoOracle.verifyNGO(msg.sender), "NGO address not approved");
+        
         uint256 proposalId = nextProposalId++;
 
         Proposal storage p = proposals[proposalId];
         p.id = proposalId;
         p.ngo = msg.sender;
+        p.creation_date = block.timestamp;
 
         for (uint256 i = 0; i < milestoneDescriptions.length; i++) {
             p.milestones.push(
@@ -80,6 +106,7 @@ contract ProposalManager {
                     description: milestoneDescriptions[i],
                     amount: milestoneAmounts[i],
                     verified: false,
+                    released: false,
                     proofHash: bytes32(0)
                 })
             );
@@ -96,7 +123,7 @@ contract ProposalManager {
         return proposals[proposalId];
     }
 
-    function getAllProjects() external view returns (Proposal[] memory) {
+    function getAllProposals() external view returns (Proposal[] memory) {
         Proposal[] memory all = new Proposal[](nextProposalId - 1);
         for (uint256 i = 1; i < nextProposalId; i++) {
             all[i - 1] = proposals[i];
@@ -120,6 +147,14 @@ contract ProposalManager {
         return proposals[proposalId].ngo == ngo;
     }
 
+    function killProposal(uint proposalId) external {
+        Proposal storage p = proposals[proposalId];
+        require(proposalId < nextProposalId && proposalId > 0, "Invalid proposalId");
+        require(p.id != 0, "Already inactive");
+        p.id = 0;
+        emit ProposalKilled(proposalId, p.ngo);
+    }
+
     /**
      * @notice Verifies a milestone and marks it as complete with proof
      * @dev Only callable by the ProofOracle contract (enforced via onlyProofOracle modifier)
@@ -127,7 +162,7 @@ contract ProposalManager {
      *      On success: stores keccak256 hash of proofURL and sets verified = true
      * @param proposalId ID of the target proposal
      * @param milestoneIndex Index of the milestone within the proposal
-     * @param proofURL Full IPFS URL (e.g. ipfs://Qm...) of the uploaded proof
+     * @param proofURL Full IPFS URL (e.g., ipfs://Qm...) of the uploaded proof
      * @return success True if milestone was successfully verified, false otherwise
      */
     function verifyMilestone(uint256 proposalId, uint256 milestoneIndex,
@@ -162,5 +197,68 @@ contract ProposalManager {
             proofURL, proposals[proposalId].ngo);
 
         return true;
+    }
+
+    /**
+     * @notice Gets the verification status of a specific milestone
+     * @dev View function, returns true if verified, false otherwise
+     * @param proposalId ID of the target proposal
+     * @param milestoneIndex Index of the milestone within the proposal
+     * @return bool True if the milestone is verified, false otherwise
+     */
+    function getMilestoneStatus(uint256 proposalId, uint256 milestoneIndex) 
+        external 
+        view 
+        returns (bool) 
+    {
+        // 1. Check that the proposal ID is valid and the proposal is active
+        // (proposalId >= nextProposalId means it never existed)
+        // (proposals[proposalId].id == 0 means it was killed/inactive)
+        require(
+            proposalId < nextProposalId && proposals[proposalId].id != 0, 
+            "Proposal not found or inactive"
+        );
+
+        // 2. Check that the milestone index is within the array's bounds
+        require(
+            milestoneIndex < proposals[proposalId].milestones.length, 
+            "Invalid milestone index"
+        );
+
+        // 3. Return the 'verified' status
+        return proposals[proposalId].milestones[milestoneIndex].verified;
+    }
+
+    function updateMilestoneReleaseStatus(uint256 proposalId, uint256 milestoneIndex) external {
+        proposals[proposalId].milestones[milestoneIndex].released = true;
+    }
+
+    function getMilestoneReleaseStatus(uint256 proposalId, uint256 milestoneIndex) 
+        external 
+        view 
+        returns (bool) 
+    {
+        // 1. Check that the proposal ID is valid and the proposal is active
+        // (proposalId >= nextProposalId means it never existed)
+        // (proposals[proposalId].id == 0 means it was killed/inactive)
+        require(
+            proposalId < nextProposalId && proposals[proposalId].id != 0, 
+            "Proposal not found or inactive"
+        );
+
+        // 2. Check that the milestone index is within the array's bounds
+        require(
+            milestoneIndex < proposals[proposalId].milestones.length, 
+            "Invalid milestone index"
+        );
+
+        // 3. Return the 'released' status
+        return proposals[proposalId].milestones[milestoneIndex].released;
+    }
+
+    function proposalExists(uint256 proposalId) external view returns (bool) {
+        // Checks if ID is in range (less than nextProposalId)
+        // and if the proposal ID is not 0 (meaning it's active)
+        return (proposalId < nextProposalId && proposals[proposalId].id != 0);
     }
 }
