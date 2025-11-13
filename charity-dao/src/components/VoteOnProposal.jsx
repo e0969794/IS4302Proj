@@ -5,14 +5,16 @@ import { useWallet } from "../context/WalletContext";
 import { useMilestone } from "../context/MilestoneContext";
 
 function VoteOnProposal({ proposal, onVoteSuccess, currentVoteCount, isNGO, isAdmin, statusLoading }) {
-  const { account, balance } = useWallet();
+  const { account, balance, updateBalance } = useWallet();
   const { getCurrentMilestone } = useMilestone();
   const [votes, setVotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [showVoteForm, setShowVoteForm] = useState(false);
-  const [previousVotes, setPreviousVotes] = useState(0);
+  const [previousVotes, setPreviousVotes] = useState(null); // null = not loaded yet, 0 = loaded and is zero
+  const [voteCost, setVoteCost] = useState("0");
+  const [loadingCost, setLoadingCost] = useState(false);
 
   // Build verification status object from proposal milestone data
   const verificationStatus = {};
@@ -49,6 +51,45 @@ function VoteOnProposal({ proposal, onVoteSuccess, currentVoteCount, isNGO, isAd
       setVotes(value);
     }
   };
+
+  // Fetch vote cost from contract with reputation discount
+  useEffect(() => {
+    const fetchVoteCost = async () => {
+      if (!account || !votes || votes === "" || isNaN(votes) || Number(votes) <= 0) {
+        setVoteCost("0");
+        return;
+      }
+
+      // Don't calculate cost until we know previousVotes
+      if (previousVotes === undefined || previousVotes === null) {
+        return;
+      }
+
+      setLoadingCost(true);
+      try {
+        const { votingManager } = await getContracts();
+        const costInTokens = await votingManager.calculateVoteCost(proposal.id, Number(votes), account);
+        // The contract returns cost in token units (not Wei), so just convert to string
+        const costStr = costInTokens.toString();
+        console.log("Vote cost calculation:", {
+          votes,
+          previousVotes,
+          costInTokens: costStr,
+          costDisplay: costStr
+        });
+        setVoteCost(costStr);
+      } catch (err) {
+        console.error("Failed to calculate vote cost:", err);
+        // Fallback to basic calculation if contract call fails
+        const basicCost = calculateVotingCost(votes);
+        setVoteCost(basicCost);
+      } finally {
+        setLoadingCost(false);
+      }
+    };
+
+    fetchVoteCost();
+  }, [votes, account, proposal.id, previousVotes]);
 
   const calculateVotingCost = (additionalVotes) => {
     try {
@@ -115,25 +156,25 @@ function VoteOnProposal({ proposal, onVoteSuccess, currentVoteCount, isNGO, isAd
       }
 
       const voteAmount = Number(votes);
-      const cost = calculateVotingCost(votes);
+      const costTokens = Number(voteCost); // voteCost is in token units
+      const balanceTokens = Number(balance); // balance is also in token units (formatted with formatEther)
       
-      // The balance is in formatted ETH (e.g. "5.0"), cost is raw number
-      // Need to compare properly
-      if (parseFloat(balance) < parseFloat(cost)) {
-        setError(`Insufficient GOV tokens. Need ${cost} GOV, you have ${balance} GOV`);
+      // Both values are in token units, so we can compare directly
+      if (balanceTokens < costTokens) {
+        setError(`Insufficient GOV tokens. Need ${costTokens.toFixed(2)} GOV, you have ${balanceTokens.toFixed(2)} GOV`);
         return;
       }
 
       console.log("Voting details:", {
         proposalId: proposal.id,
         voteAmount,
-        cost,
-        balance,
+        costTokens,
+        balanceTokens,
         previousVotes,
-        hasEnoughBalance: parseFloat(balance) >= parseFloat(cost)
+        hasEnoughBalance: balanceTokens >= costTokens
       });
 
-      const { votingManager } = await getContracts();
+      const { votingManager, governanceToken } = await getContracts();
       
       // The VotingManager expects votes as regular numbers, not wei
       const tx = await votingManager.vote(proposal.id, voteAmount);
@@ -141,7 +182,19 @@ function VoteOnProposal({ proposal, onVoteSuccess, currentVoteCount, isNGO, isAd
       await tx.wait();
       console.log("Vote transaction confirmed:", tx.hash);
 
-      setSuccess(`Successfully cast ${votes} votes!`);
+      // Refresh balance after voting (tokens were burned)
+      // Add a small delay to ensure blockchain state is updated
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const balanceWei = await governanceToken.balanceOf(account);
+      const newBalance = ethers.formatEther(balanceWei);
+      updateBalance(newBalance);
+      console.log("✅ Balance refreshed after vote:", {
+        oldBalance: balance,
+        newBalance,
+        tokensBurned: (parseFloat(balance) - parseFloat(newBalance)).toFixed(2)
+      });
+
+      setSuccess(`Successfully cast ${votes} votes! Balance updated.`);
       setVotes("");
       setShowVoteForm(false);
       
@@ -271,9 +324,17 @@ function VoteOnProposal({ proposal, onVoteSuccess, currentVoteCount, isNGO, isAd
           <label htmlFor="votes" className="block text-sm font-medium text-purple-700 mb-2">
             Number of Votes
           </label>
-          {previousVotes > 0 && (
+          {previousVotes === null ? (
+            <p className="text-sm text-gray-500 mb-2 italic">
+              Loading your voting history...
+            </p>
+          ) : previousVotes > 0 ? (
             <p className="text-sm text-blue-600 mb-2">
               You have already cast {previousVotes} votes on this proposal
+            </p>
+          ) : (
+            <p className="text-sm text-gray-600 mb-2">
+              This is your first vote on this proposal
             </p>
           )}
           <input
@@ -287,9 +348,56 @@ function VoteOnProposal({ proposal, onVoteSuccess, currentVoteCount, isNGO, isAd
             disabled={loading}
           />
           {votes && votes !== "" && !isNaN(votes) && Number(votes) > 0 && (
-            <p className="text-sm text-purple-600 mt-1">
-              Cost: {calculateVotingCost(votes)} GOV tokens
-            </p>
+            <div className="mt-2 space-y-1">
+              {loadingCost ? (
+                <p className="text-sm text-gray-500 italic">
+                  Calculating cost with reputation discount...
+                </p>
+              ) : (
+                <>
+                  <p className="text-sm text-purple-600 font-semibold">
+                    Cost: {Number(voteCost).toFixed(2)} GOV tokens
+                  </p>
+                  {(() => {
+                    const totalVotesCount = Number(previousVotes || 0) + Number(votes);
+                    const prevVotes = Number(previousVotes || 0);
+                    
+                    // Calculate base cost (without any discount)
+                    const baseCost = (totalVotesCount * totalVotesCount) - (prevVotes * prevVotes);
+                    const actualCost = Number(voteCost);
+                    
+                    // Calculate savings
+                    const savings = baseCost - actualCost;
+                    
+                    // Calculate the actual discount percentage
+                    // If actualCost = baseCost * 0.96, then discount is 4%
+                    // If actualCost = baseCost * 0.92, then discount is 8%
+                    const discountPercent = baseCost > 0 ? ((savings / baseCost) * 100).toFixed(1) : "0.0";
+                    
+                    // Show discount info if there's a meaningful discount (>0.1%)
+                    if (parseFloat(discountPercent) >= 0.1) {
+                      return (
+                        <>
+                          <p className="text-xs text-gray-500">
+                            Base cost: {baseCost.toFixed(2)} tokens
+                          </p>
+                          <p className="text-xs text-green-600">
+                            💰 Saving {savings.toFixed(2)} tokens ({discountPercent}% discount) with your reputation!
+                          </p>
+                        </>
+                      );
+                    } else if (baseCost > 0) {
+                      return (
+                        <p className="text-xs text-gray-500">
+                          No reputation discount applied
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
+                </>
+              )}
+            </div>
           )}
         </div>
         
@@ -336,7 +444,7 @@ function VoteOnProposal({ proposal, onVoteSuccess, currentVoteCount, isNGO, isAd
       
       <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
         <p className="text-blue-700 text-xs">
-          💡 <strong>Quadratic Voting:</strong> Cost increases quadratically (votes²). Your balance: {balance} GOV
+          💡 <strong>Quadratic Voting:</strong> Cost increases quadratically (votes²). Your balance: {parseFloat(balance).toFixed(2)} GOV
         </p>
       </div>
     </div>

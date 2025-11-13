@@ -3,6 +3,7 @@ import { ethers } from "ethers";
 import { getContracts } from "../utils/contracts";
 import { useWallet } from "../context/WalletContext";
 import { useMilestone } from "../context/MilestoneContext";
+import ReputationBadge from "./ReputationBadge";
 
 function WalletConnect() {
   const { account, balance, updateAccount, updateBalance } = useWallet();
@@ -10,6 +11,7 @@ function WalletConnect() {
   const [error, setError] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const isConnecting = useRef(false);
+  const lastBalanceRef = useRef(balance);
 
   const refreshBalance = async (address) => {
     try {
@@ -19,8 +21,11 @@ function WalletConnect() {
         console.error("Contract call failed:", err);
         return 0n; // Fallback to 0 on failure
       });
-      console.log("Balance refreshed:", balanceWei.toString());
-      updateBalance(ethers.formatEther(balanceWei));
+      console.log("Balance refreshed (wei):", balanceWei.toString());
+      const formattedBalance = ethers.formatEther(balanceWei);
+      console.log("Balance refreshed (formatted):", formattedBalance);
+      lastBalanceRef.current = formattedBalance;
+      updateBalance(formattedBalance);
     } catch (err) {
       console.error("Balance refresh error:", err);
       setError("Failed to refresh balance: " + err.message);
@@ -104,11 +109,14 @@ function WalletConnect() {
       });
       
       // Refresh balance when user votes (GOV tokens are spent)
-      votingManager.on("VoteCast", async (voter, proposalId, voteId, votes) => {
+      // VoteCast event signature: (address voter, uint256 proposalId, bytes32 voteId, uint256 votes, uint256 tokensCost)
+      votingManager.on("VoteCast", async (voter, proposalId, voteId, votes, tokensCost) => {
         console.log("🔔 VoteCast event detected:", {
           voter,
           proposalId: proposalId.toString(),
           votes: votes.toString(),
+          tokensCost: tokensCost.toString(),
+          tokensCostFormatted: ethers.formatEther(tokensCost)
         });
         console.log("Voter:", voter.toLowerCase());
         console.log("Address: ", address.toLowerCase());
@@ -119,12 +127,20 @@ function WalletConnect() {
         }
       });
 
-      // Block-based fallback for reliability
+      // Block-based fallback for reliability - check every block
       provider.on("block", async () => {
         if (!address) return;
-        const bal = await governanceToken.balanceOf(address);
-        const formatted = ethers.formatEther(bal);
-        if (formatted !== balance) updateBalance(formatted);
+        try {
+          const bal = await governanceToken.balanceOf(address);
+          const formatted = ethers.formatEther(bal);
+          if (formatted !== lastBalanceRef.current) {
+            console.log("📊 Balance changed via block polling:", lastBalanceRef.current, "→", formatted);
+            lastBalanceRef.current = formatted;
+            updateBalance(formatted);
+          }
+        } catch (err) {
+          console.error("Block polling error:", err);
+        }
       });
     } catch (err) {
       console.error("Connection failed:", err);
@@ -133,6 +149,11 @@ function WalletConnect() {
       isConnecting.current = false;
     }
   };
+
+  // Keep ref in sync with balance state
+  useEffect(() => {
+    lastBalanceRef.current = balance;
+  }, [balance]);
 
   useEffect(() => {
     let mounted = true;
@@ -259,44 +280,51 @@ function WalletConnect() {
           </div>
           
           {account ? (
-            <div className="flex items-center space-x-4 bg-gray-50 px-4 py-2 rounded-lg">
-              <div className="text-right">
-                <p className="text-sm text-gray-600">Connected Wallet</p>
-                <p className="font-mono text-sm text-gray-800">
-                  {account.slice(0, 6)}...{account.slice(-4)}
-                </p>
+            <div className="flex items-center space-x-4">
+              <div className="bg-gray-50 px-4 py-2 rounded-lg flex items-center space-x-4">
+                <div className="text-right">
+                  <p className="text-sm text-gray-600">Connected Wallet</p>
+                  <p className="font-mono text-sm text-gray-800">
+                    {account.slice(0, 6)}...{account.slice(-4)}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-gray-600">GOV Balance</p>
+                  {isSyncing ? (
+                    <div className="flex items-center justify-end space-x-2 text-gray-500 animate-pulse transition-opacity duration-300">
+                      <svg
+                        className="w-4 h-4 animate-spin text-gray-400"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                        />
+                      </svg>
+                      <p className="text-lg">Sync…</p>
+                    </div>
+                  ) : (
+                    <p className="text-lg font-semibold text-blue-600">
+                      {parseFloat(balance).toFixed(2)} GOV
+                    </p>
+                  )}
+                </div>
+                <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
               </div>
-              <div className="text-right">
-                <p className="text-sm text-gray-600">GOV Balance</p>
-                {isSyncing ? (
-                  <div className="flex items-center justify-end space-x-2 text-gray-500 animate-pulse transition-opacity duration-300">
-                    <svg
-                      className="w-4 h-4 animate-spin text-gray-400"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                      />
-                    </svg>
-                    <p className="text-lg">Sync…</p>
-                  </div>
-                ) : (
-                  <p className="text-lg font-semibold text-blue-600">{balance} GOV</p>
-                )}
-              </div>
-              <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+              
+              {/* Reputation Badge - key forces refresh when balance changes */}
+              <ReputationBadge key={`${account}-${balance}`} />
             </div>
           ) : (
             <button

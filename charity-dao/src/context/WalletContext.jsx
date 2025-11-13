@@ -12,7 +12,15 @@ export function WalletProvider({ children }) {
   }, []);
 
   const updateBalance = useCallback((newBalance) => {
-    setBalance(newBalance);
+    setBalance(prevBalance => {
+      console.log("🔄 WalletContext.updateBalance called:", {
+        oldBalance: prevBalance,
+        newBalance,
+        changed: prevBalance !== newBalance,
+        timestamp: new Date().toISOString()
+      });
+      return newBalance;
+    });
   }, []);
 
   return (

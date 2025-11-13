@@ -30,22 +30,6 @@ contract ProposalManager {
     mapping(uint256 => Proposal) public proposals;
     // NGO address -> proposalIds
 
-    // Event emitted when a milestone is verified
-    event MilestoneVerified(
-        uint256 indexed proposalId,
-        uint256 indexed milestoneIndex,
-        bytes32 proofHash,
-        string proofURL,
-        address ngo
-    );
-    // Event emitted when a milestone is rejected
-    event MilestoneRejected(
-        uint256 indexed proposalId,
-        uint256 indexed milestoneIndex,
-        address ngo,
-        string reason
-    );
-
     event ProposalCreated(uint256 indexed proposalId, address ngo);
     event ProposalKilled(uint256 indexed proposalId, address ngo);
 

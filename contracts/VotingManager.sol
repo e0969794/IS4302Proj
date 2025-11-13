@@ -343,12 +343,15 @@ contract VotingManager is AccessControl, ReentrancyGuard {
         uint256 previousVotes = userVotes[proposalId][msg.sender];
         uint256 totalVotes = previousVotes + newVotes;
 
-        // Calculate token cost with reputation-based discount
+        // Calculate token cost with reputation-based discount (returns plain number)
         uint256 tokensRequired = _calculateVoteCost(previousVotes, newVotes, msg.sender);
+        
+        // Convert tokens to Wei (multiply by 10^18) for burning
+        uint256 tokensRequiredInWei = tokensRequired * 1e18;
 
-        require(treasury.getTokenBalance(msg.sender) >= tokensRequired, "Insufficient credits");
+        require(treasury.getTokenBalance(msg.sender) >= tokensRequiredInWei, "Insufficient credits");
 
-        treasury.burnETH(msg.sender, tokensRequired);
+        treasury.burnETH(msg.sender, tokensRequiredInWei);
 
         userVotes[proposalId][msg.sender] = totalVotes;
         
@@ -357,7 +360,7 @@ contract VotingManager is AccessControl, ReentrancyGuard {
         
         //dont need to check if it doesnt exist because by default it is 0
         proposalVotesMapping[proposalId] += newVotes;
-        emit VoteCast(msg.sender, proposalId, voteId, newVotes, tokensRequired);
+        emit VoteCast(msg.sender, proposalId, voteId, newVotes, tokensRequiredInWei);
         _updateProposalAfterVote(proposalId);
     }   
 

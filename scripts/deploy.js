@@ -149,7 +149,7 @@ async function main() {
     // Deploy ProposalManager
     console.log("Deploying ProposalManager...");
     const ProposalManager = await ethers.getContractFactory("ProposalManager");
-    const proposalManager = await ProposalManager.deploy();
+    const proposalManager = await ProposalManager.deploy(await ngoOracle.getAddress());
     await proposalManager.waitForDeployment();
 
     // Deploy ProofOracle

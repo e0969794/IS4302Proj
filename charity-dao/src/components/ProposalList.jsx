@@ -24,7 +24,7 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
       setError(null);
 
       const { proposalManager, votingManager, proofOracle } = await getContracts();
-      const proposals = await proposalManager.getAllProjects().catch(err => {
+      const proposals = await proposalManager.getAllProposals().catch(err => {
         console.error("Failed to fetch proposals:", err);
         throw new Error("Failed to fetch proposals: " + err.message);
       });
@@ -64,8 +64,8 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
             );
             const proofId = await proofOracle.proofIndex(key);
 
-            if (proofId > 0) {
-              // Fetch proof details to check if it was rejected
+              if (proofId > 0) {
+              // Fetch proof details to check if it was rejected or needs review
               const proof = await proofOracle.getProof(proofId);
 
               if (proof.processed && !proof.approved) {
@@ -75,8 +75,13 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
                   reason: proof.reason || "No reason provided"
                 };
                 proofData[proposal.id.toString()][index] = 0; // Don't show as submitted
-              } else {
+              } else if (!proof.processed) {
+                // Proof is submitted but not yet processed - show for admin review
                 proofData[proposal.id.toString()][index] = Number(proofId);
+                rejectionData[index] = { rejected: false };
+              } else {
+                // Proof was approved (processed && approved)
+                proofData[proposal.id.toString()][index] = 0; // Hide review UI after approval
                 rejectionData[index] = { rejected: false };
               }
             } else {
@@ -253,7 +258,7 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
                   <div className="flex items-center space-x-4 text-sm text-gray-600">
                     {(() => {
                       const allMilestonesVerified = p.milestones?.every((m) => m.verified);
-                      const currentVotes = ethers.formatEther(voteCounts[p.id] || "0");
+                      const currentVotes = voteCounts[p.id] || "0";
                       const currentMilestone = getCurrentMilestone(p.id, currentVotes, p.milestones);
                       const isProjectComplete = currentMilestone >= (p.milestones?.length - 1) && allMilestonesVerified;
 
@@ -291,10 +296,10 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
                   <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-medium">
                     {(() => {
                       try {
-                        return ethers.formatEther(voteCounts[p.id] || "0") + " ETH worth of votes";
+                        return (voteCounts[p.id] || "0") + " votes";
                       } catch (error) {
                         console.error("Error formatting vote count:", error);
-                        return "0 ETH worth of votes";
+                        return "0 votes";
                       }
                     })()}
                   </span>
@@ -309,7 +314,7 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
                         width: `${(() => {
                           try {
                             return Math.min(
-                              (parseFloat(ethers.formatEther(voteCounts[p.id] || "0")) / 
+                              (parseFloat(voteCounts[p.id] || "0") / 
                                parseFloat(ethers.formatEther(p.totalFunds))) * 100,
                               100
                             );
@@ -326,7 +331,7 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
                 <span className="text-sm text-gray-600">
                   {(() => {
                     try {
-                      return ((parseFloat(ethers.formatEther(voteCounts[p.id] || "0")) / 
+                      return ((parseFloat(voteCounts[p.id] || "0") / 
                                parseFloat(ethers.formatEther(p.totalFunds))) * 100).toFixed(1) + "%";
                     } catch (error) {
                       console.error("Error calculating percentage:", error);
@@ -347,7 +352,7 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
               </h4>
               <div className="space-y-3">
                 {p.milestones.map((m, index) => {
-                  const currentVotes = ethers.formatEther(voteCounts[p.id] || "0");
+                  const currentVotes = voteCounts[p.id] || "0";
                   const currentMilestone = getCurrentMilestone(p.id, currentVotes, p.milestones);
                   const isCompleted = index <= currentMilestone;
                   const proofId = submittedProofs[p.id]?.[index] || 0;
@@ -418,6 +423,21 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
                         </div>
                       </div>
 
+                      {/* Show "Awaiting Admin Approval" message for NGOs when proof is submitted */}
+                      {isNGO && account && p.ngo.toLowerCase() === account.toLowerCase() && proofSubmitted && !m.verified && !isRejected && (
+                        <div className="mt-2 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                          <div className="flex items-start space-x-2">
+                            <span className="text-purple-600 text-lg">⏳</span>
+                            <div>
+                              <p className="text-purple-800 font-semibold text-sm">Proof Submitted - Awaiting Admin Approval</p>
+                              <p className="text-purple-700 text-xs mt-1">
+                                Your proof has been submitted successfully. An administrator will review and approve it shortly.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Show milestone proof upload for NGOs when THIS specific milestone needs verification OR was rejected */}
                       {isNGO && account && p.ngo.toLowerCase() === account.toLowerCase() && (needsVerification || isRejected) && (
                         <ErrorBoundary>
@@ -451,7 +471,7 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
                     <VoteOnProposal
                       proposal={p}
                       onVoteSuccess={fetchProposals}
-                      currentVoteCount={ethers.formatEther(voteCounts[p.id] || "0")}
+                      currentVoteCount={voteCounts[p.id] || "0"}
                       isNGO={isNGO}
                       isAdmin={isAdmin}
                       statusLoading={loading}
