@@ -43,6 +43,17 @@ function CreateProposal() {
         }
       }
 
+      // Validate that sum of milestone amounts equals total funds
+      const milestoneSum = milestones.reduce((sum, m) => sum + parseFloat(m.amount), 0);
+      const totalFundsNum = parseFloat(totalFunds);
+
+      if (Math.abs(milestoneSum - totalFundsNum) > 0.0001) {
+        setError(
+          `Milestone amounts must sum to total budget. Current sum: ${milestoneSum.toFixed(4)} ETH, Expected: ${totalFundsNum.toFixed(4)} ETH`
+        );
+        return;
+      }
+
       const { proposalManager, ngoOracle } = await getContracts();
 
       // Check if connected account is a verified NGO
@@ -132,7 +143,7 @@ function CreateProposal() {
         </div>
 
         <div>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-2">
             <label className="block text-sm font-medium text-gray-700">
               Project Milestones
             </label>
@@ -144,7 +155,7 @@ function CreateProposal() {
               <span className="mr-1">+</span> Add Milestone
             </button>
           </div>
-          
+
           <div className="space-y-4">
             {milestones.map((milestone, index) => (
               <div key={index} className="p-4 border border-gray-200 rounded-lg bg-gray-50 relative">
@@ -193,7 +204,7 @@ function CreateProposal() {
                           e.preventDefault();
                         }
                       }}
-                      placeholder="Cumulative amount needed"
+                      placeholder="Milestone funding target"
                       className="w-full pl-3 pr-14 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     />
                     <span className="absolute right-3 top-2 text-gray-500 text-sm pointer-events-none">ETH</span>
@@ -203,6 +214,26 @@ function CreateProposal() {
             ))}
           </div>
         </div>
+
+        {/* Milestone sum validation display */}
+        {milestones.some(m => m.amount) && totalFunds && (
+          <div className={`p-3 border rounded-lg ${
+            Math.abs(milestones.reduce((sum, m) => sum + (parseFloat(m.amount) || 0), 0) - parseFloat(totalFunds)) < 0.0001
+              ? 'bg-green-50 border-green-200'
+              : 'bg-yellow-50 border-yellow-200'
+          }`}>
+            <p className={`text-xs ${
+              Math.abs(milestones.reduce((sum, m) => sum + (parseFloat(m.amount) || 0), 0) - parseFloat(totalFunds)) < 0.0001
+                ? 'text-green-700'
+                : 'text-yellow-700'
+            }`}>
+              <strong>Milestone Sum:</strong> {milestones.reduce((sum, m) => sum + (parseFloat(m.amount) || 0), 0).toFixed(4)} ETH / {parseFloat(totalFunds).toFixed(4)} ETH
+              {Math.abs(milestones.reduce((sum, m) => sum + (parseFloat(m.amount) || 0), 0) - parseFloat(totalFunds)) < 0.0001
+                ? ' ✓'
+                : <><br />⚠️ Sum must equal total budget</>}
+            </p>
+          </div>
+        )}
 
         <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <p className="text-blue-700 text-xs">
