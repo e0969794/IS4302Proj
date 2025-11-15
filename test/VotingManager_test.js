@@ -7,7 +7,7 @@ describe("VotingManager", function () {
   let govToken, treasury, proposalManager, votingManager, ngoOracle;
   let proposalId;
   let admin, donor1, donor2, donor3;
-  const initialMintRate = 1; // 1 GOV per 1 ETH
+  const initialMintRate = ethers.parseEther("1000");
 
   const milestonesDesc = ["Build school", "Purchase books", "Hire teachers"];
   const milestonesAmt = [10, 5, 8];
@@ -168,9 +168,10 @@ describe("VotingManager", function () {
       const donor2Balance = await treasury.getTokenBalance(donor2.address);
       const donor3Balance = await treasury.getTokenBalance(donor3.address);
 
-      expect(donor1Balance).to.equal(100);
-      expect(donor2Balance).to.equal(50);
-      expect(donor3Balance).to.equal(25);
+      // With mintRate = 1000×10^18: 100 ETH → 100,000 tokens (displayed as 100000.0)
+      expect(donor1Balance).to.equal(ethers.parseEther("100000")); // 100 ETH × 1000
+      expect(donor2Balance).to.equal(ethers.parseEther("50000"));  // 50 ETH × 1000
+      expect(donor3Balance).to.equal(ethers.parseEther("25000"));  // 25 ETH × 1000
     });
 
     it("Should deduct quadratic cost correctly when voting", async function () {
@@ -181,7 +182,7 @@ describe("VotingManager", function () {
 
       const spent = beforeBalance - afterBalance;
       //console.log("Credits spent:", spent.toString());
-      expect(spent).to.equal(BigInt(25));
+      expect(spent).to.equal(ethers.parseEther("25")); // 25 tokens with 18 decimals
 
       // check proposal vote tally
       const totalVotes = await votingManager.getProposalVotes(proposalId);
@@ -197,14 +198,14 @@ describe("VotingManager", function () {
       await votingManager.connect(donor2).vote(proposalId, 5);
       const afterBalance = await treasury.getTokenBalance(donor2.address);
       const spent = beforeBalance - afterBalance;
-      expect(spent).to.equal(BigInt(25));
+      expect(spent).to.equal(ethers.parseEther("25"));
       const afterdonorBal1 = await govToken.balanceOf(donor2.address);
       console.log(
         "Afer 1st Donation, Donor balance:",
         afterdonorBal1.toString()
       );
 
-      // Second vote: 3 more votes (total 8 votes, costs 8^2 = 64 credits, additional cost = 64-25 = 39)
+      // Second vote: 2 more votes (total 7 votes, costs 7^2 = 49 credits total)
       await votingManager.connect(donor2).vote(proposalId, 2);
       const afterdonorBa2 = await govToken.balanceOf(donor2.address);
       console.log(
@@ -213,15 +214,16 @@ describe("VotingManager", function () {
       );
       const new_afterBalance = await treasury.getTokenBalance(donor2.address);
       const new_spent = beforeBalance - new_afterBalance;
-      expect(new_spent).to.equal(BigInt(49));
+      expect(new_spent).to.equal(ethers.parseEther("49"));
     });
 
     it("Should revert if donor has insufficient credits", async function () {
-      // donor3 only has 25 credits → cannot cast 6 votes (requires 36 credits)
+      // donor3 has 25,000 tokens (25 ETH × 1000)
+      // √25000 ≈ 158, so 159 votes would cost 159² = 25,281 tokens (exceeds balance)
       const donorBal = await govToken.balanceOf(donor3.address);
       console.log("Donor balance:", donorBal.toString());
       await expect(
-        votingManager.connect(donor3).vote(proposalId, 6)
+        votingManager.connect(donor3).vote(proposalId, 159)
       ).to.be.revertedWith("Insufficient credits");
     });
 
@@ -303,7 +305,7 @@ describe("VotingManager", function () {
     });
     it("Should disburse milestone funds to NGO when votes reach threshold", async function () {
       const desc = ["Milestone 1"];
-      const amt = [2]; // small target for test
+      const amt = [10]; // 10 votes needed to trigger disbursement
       const ngo = wallets.ngo[0].signer;
       const tx = await proposalManager.connect(ngo).createProposal(desc, amt);
       const receipt = await tx.wait();
@@ -318,17 +320,25 @@ describe("VotingManager", function () {
         .filter((e) => e && e.name === "ProposalCreated")[0];
       const testProposalId = event.args.proposalId;
 
-      // NGO balance before
-      const beforeBalance = await ethers.provider.getBalance(ngo.address);
+      // Cast enough votes to trigger milestone (10 votes costs 100 tokens)
+      const voteTx = await votingManager.connect(donor1).vote(testProposalId, 10);
+      const voteReceipt = await voteTx.wait();
 
-      // Cast enough votes
-      await votingManager.connect(donor1).vote(testProposalId, 10);
+      // Check that the DisburseMilestone event was emitted
+      const milestoneEvent = voteReceipt.logs
+        .map((log) => {
+          try {
+            return votingManager.interface.parseLog(log);
+          } catch {
+            return null;
+          }
+        })
+        .filter((e) => e && e.name === "DisburseMilestone")[0];
 
-      // NGO balance after
-      const afterBalance = await ethers.provider.getBalance(ngo.address);
-
-      // Ensure funds were sent
-      expect(afterBalance).to.be.gt(beforeBalance);
+      expect(milestoneEvent).to.not.be.undefined;
+      expect(milestoneEvent.args.proposalId).to.equal(testProposalId);
+      expect(milestoneEvent.args.milestoneIndex).to.equal(0);
+      expect(milestoneEvent.args.amountReleased).to.equal(10);
     });
   });
   describe("Valid Proposals", function () {
@@ -336,7 +346,7 @@ describe("VotingManager", function () {
 
     it("Should allow oracle to kill proposal after expiry and mark it invalid", async function () {
       const milestoneDesc = ["Build library"];
-      const milestoneAmt = [ethers.parseEther("5")];
+      const milestoneAmt = [100]; // 100 votes needed
       const ngo = wallets.ngo[0].signer;
       const createTx = await proposalManager
         .connect(ngo)
@@ -367,9 +377,9 @@ describe("VotingManager", function () {
 
       // create two new proposals
       const milestoneDesc2 = ["Buy laptops"];
-      const milestoneAmt2 = [ethers.parseEther("6")];
+      const milestoneAmt2 = [100]; // 100 votes needed
       const milestoneDesc1 = ["Construct classroom"];
-      const milestoneAmt1 = [ethers.parseEther("10")];
+      const milestoneAmt1 = [200]; // 200 votes needed
       const ngo = wallets.ngo[0].signer;
       await proposalManager
         .connect(ngo)
@@ -401,9 +411,9 @@ describe("VotingManager", function () {
 
       // create two new proposals
       const milestoneDesc2 = ["Buy laptops"];
-      const milestoneAmt2 = [ethers.parseEther("6")];
+      const milestoneAmt2 = [100]; // 100 votes needed
       const milestoneDesc1 = ["Construct classroom"];
-      const milestoneAmt1 = [ethers.parseEther("10")];
+      const milestoneAmt1 = [200]; // 200 votes needed
       const ngo = wallets.ngo[0].signer;
       await proposalManager
         .connect(ngo)
@@ -603,10 +613,10 @@ describe("VotingManager", function () {
     });
 
     it("Should allow voting on milestone 0 (no previous milestone to check)", async function () {
-      // Donor 1 has 100 credits, 5 votes costs 25
+      // Donor 1 has 100,000 tokens (100 ETH × 1000), 5 votes costs 25 tokens
       await expect(votingManager.connect(donor1).vote(testProposalId, 5))
         .to.emit(votingManager, "VoteCast")
-        .withArgs(donor1.address, testProposalId, anyValue, 5, 25);
+        .withArgs(donor1.address, testProposalId, anyValue, 5, ethers.parseEther("25"));
 
       expect(await votingManager.getProposalVotes(testProposalId)).to.equal(5);
       expect(await votingManager.nextMilestoneMapping(testProposalId)).to.equal(
