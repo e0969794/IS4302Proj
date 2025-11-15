@@ -38,18 +38,21 @@ export const calculateCurrentMilestone = (voteCount, milestones) => {
   try {
     const normalizedVotes = normalizeVoteCount(voteCount);
     const votesInWei = ethers.parseEther(normalizedVotes);
-    
+
     let lastReachedMilestone = -1;
-    
+    let cumulativeAmount = 0n; // Track cumulative sum
+
     for (let i = 0; i < milestones.length; i++) {
       const milestoneAmount = ethers.parseEther(ethers.formatEther(milestones[i].amount));
-      if (votesInWei >= milestoneAmount) {
+      cumulativeAmount += milestoneAmount; // Add to cumulative total
+
+      if (votesInWei >= cumulativeAmount) {
         lastReachedMilestone = i;
       } else {
         break;
       }
     }
-    
+
     return lastReachedMilestone;
   } catch (error) {
     console.error('Error calculating current milestone:', error);
@@ -59,13 +62,14 @@ export const calculateCurrentMilestone = (voteCount, milestones) => {
 
 /**
  * Check if a specific milestone has been completed (vote threshold reached)
+ * Note: This function expects the cumulative milestone amount, not individual amounts
  */
-export const isMilestoneCompleted = (voteCount, milestoneAmount) => {
+export const isMilestoneCompleted = (voteCount, cumulativeMilestoneAmount) => {
   try {
     const normalizedVotes = normalizeVoteCount(voteCount);
     const votesInWei = ethers.parseEther(normalizedVotes);
-    const milestoneInWei = ethers.parseEther(ethers.formatEther(milestoneAmount));
-    
+    const milestoneInWei = ethers.parseEther(ethers.formatEther(cumulativeMilestoneAmount));
+
     return votesInWei >= milestoneInWei;
   } catch (error) {
     console.error('Error checking milestone completion:', error);
@@ -209,23 +213,30 @@ export const canUploadProof = (userAddress, proposalNGO, milestoneIndex, voteCou
     if (!userAddress || !proposalNGO || userAddress.toLowerCase() !== proposalNGO.toLowerCase()) {
       return false;
     }
-    
+
     // Check if milestone is completed
     if (milestoneIndex >= milestones.length) {
       return false;
     }
-    
-    const isMilestoneReached = isMilestoneCompleted(voteCount, milestones[milestoneIndex].amount);
+
+    // Calculate cumulative amount up to this milestone
+    let cumulativeAmount = 0n;
+    for (let i = 0; i <= milestoneIndex; i++) {
+      const amount = ethers.parseEther(ethers.formatEther(milestones[i].amount));
+      cumulativeAmount += amount;
+    }
+
+    const isMilestoneReached = isMilestoneCompleted(voteCount, cumulativeAmount);
     if (!isMilestoneReached) {
       return false;
     }
-    
+
     // Check if milestone is already verified
     const isAlreadyVerified = milestoneVerificationStatus?.[milestoneIndex]?.verified || false;
     if (isAlreadyVerified) {
       return false;
     }
-    
+
     return true;
   } catch (error) {
     console.error('Error checking if user can upload proof:', error);
