@@ -13,19 +13,19 @@ function ProofReview({ proofId, onReviewComplete }) {
   const [proofProcessed, setProofProcessed] = useState(false);
   const [checkingProof, setCheckingProof] = useState(true);
 
-  // Check if proof has already been processed (approved or rejected)
+  // Check if proof has already been processed (approved or rejected)	
   useEffect(() => {
     const checkProofStatus = async () => {
-      if (!proofId) {
+      if (proofId === undefined || proofId === null) {
         setCheckingProof(false);
         return;
       }
 
       try {
         const { proofOracle } = await getContracts();
-        const proof = await proofOracle.getProof(proofId);
-
-        // If proof is already processed, hide the UI
+        const proof = await proofOracle.getSubmission(proofId);
+	
+	// If proof is already processed, hide the UI
         if (proof.processed) {
           setProofProcessed(true);
         }
@@ -44,7 +44,7 @@ function ProofReview({ proofId, onReviewComplete }) {
       setLoading(true);
       setError(null);
       const { proofOracle } = await getContracts();
-      const proof = await proofOracle.getProof(proofId);
+      const proof = await proofOracle.getSubmission(proofId);
 
       setProofDetails({
         proposalId: proof.proposalId.toString(),
@@ -122,12 +122,12 @@ function ProofReview({ proofId, onReviewComplete }) {
 
   // Still checking if proof was already processed
   if (checkingProof) {
-    return null;
+	return null;
   }
-
-  // If proof has been processed (approved or rejected), hide the UI
+  
+  // If proof has been processed (approved or rejected), hide the UI	
   if (proofProcessed) {
-    return null;
+	return null;
   }
 
   // Show the review button if form is not open
@@ -193,18 +193,10 @@ function ProofReview({ proofId, onReviewComplete }) {
       {proofDetails && (
         <>
           <div className="mb-4 space-y-2 text-sm text-purple-700 bg-white p-3 rounded-lg border border-purple-200">
-            <p>
-              <strong>Proposal ID:</strong> #{proofDetails.proposalId}
-            </p>
-            <p>
-              <strong>Milestone:</strong> #{proofDetails.milestoneIndex + 1}
-            </p>
-            <p>
-              <strong>NGO:</strong> {proofDetails.ngo.slice(0, 6)}...{proofDetails.ngo.slice(-4)}
-            </p>
-            <p>
-              <strong>Submitted:</strong> {proofDetails.submittedAt}
-            </p>
+            <p><strong>Proposal ID:</strong> #{proofDetails.proposalId}</p>
+            <p><strong>Milestone:</strong> #{proofDetails.milestoneIndex + 1}</p>
+            <p><strong>NGO:</strong> {proofDetails.ngo.slice(0, 6)}...{proofDetails.ngo.slice(-4)}</p>
+            <p><strong>Submitted:</strong> {proofDetails.submittedAt}</p>
           </div>
         </>
       )}
@@ -258,9 +250,6 @@ function ProofReview({ proofId, onReviewComplete }) {
       ) : (
         <div className="space-y-3">
           <div>
-            <label className="block text-sm font-medium text-purple-800 mb-2">
-              Reason for Rejection:
-            </label>
             <textarea
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
@@ -294,16 +283,18 @@ function ProofReview({ proofId, onReviewComplete }) {
           </div>
         </div>
       )}
-
+	
       {/* Message Box */}
       {message && (
-        <div className={`mt-4 p-3 rounded-md border ${
-          message.type === 'error'
-            ? 'bg-red-50 border-red-200 text-red-700'
-            : message.type === 'success'
-            ? 'bg-green-50 border-green-200 text-green-700'
-            : 'bg-blue-50 border-blue-200 text-blue-700'
-        }`}>
+        <div
+          className={`mt-4 p-3 rounded-md border ${
+            message.type === 'error'
+              ? 'bg-red-50 border-red-200 text-red-700'
+              : message.type === 'success'
+              ? 'bg-green-50 border-green-200 text-green-700'
+              : 'bg-blue-50 border-blue-200 text-blue-700'
+          }`}
+        >
           <p className="text-sm">{message.text}</p>
         </div>
       )}

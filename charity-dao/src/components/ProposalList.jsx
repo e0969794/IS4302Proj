@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { ethers } from "ethers";
-import { getContracts, getProposalContract } from "../utils/contracts";
+import { getContracts } from "../utils/contracts";
 import { useWallet } from "../context/WalletContext";
 import { useMilestone } from "../context/MilestoneContext";
 import VoteOnProposal from "./VoteOnProposal";
@@ -19,118 +19,131 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
   const [rejectedProofs, setRejectedProofs] = useState({}); // Track rejected proofs: {proposalId: {milestoneIndex: {rejected: bool, reason: string}}}
 
   const fetchProposals = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
+  try {
+    setLoading(true);
+    setError(null);
 
-      const { proposalManager, votingManager, proofOracle } = await getContracts();
-      const proposals = await proposalManager.getAllProposals().catch(err => {
-        console.error("Failed to fetch proposals:", err);
-        throw new Error("Failed to fetch proposals: " + err.message);
-      });
-      console.log("Proposals:", proposals);
+    const { proposalManager, votingManager, proofOracle } = await getContracts();
 
-      const proposalData = [];
-      const voteData = {};
-      const proofData = {};
-      const rejectedProofsData = {};
+    // 1) Fetch all proposals
+    const proposalsRaw = await proposalManager.getAllProposals().catch(err => {
+      console.error("Failed to fetch proposals:", err);
+      throw new Error("Failed to fetch proposals: " + err.message);
+    });
+    console.log("Proposals:", proposalsRaw);
 
-      for (let proposal of proposals) {
-        console.log(`Processing proposal ${proposal.id}: NGO=${proposal.ngo}`);
+    const proposalData = [];
+    const voteData = {};
 
-        // Filter proposals based on user type
-        // If user is NGO, only show their own proposals
-        // If user is regular user or admin, show all proposals
-        if (isNGO && proposal.ngo.toLowerCase() !== account.toLowerCase()) {
-          console.log(`Skipping proposal ${proposal.id} - NGO can only see own proposals`);
-          continue;
-        }
+    // Build proposal & votes first
+    for (let proposal of proposalsRaw) {
+      console.log(`Processing proposal ${proposal.id}: NGO=${proposal.ngo}`);
 
-        // Get vote count for this proposal
-        const votes = await votingManager.getProposalVotes(proposal.id).catch(err => {
-          console.error(`Failed to fetch votes for proposal ${proposal.id}:`, err);
-          return 0n; // Fallback to 0 votes
-        });
-        voteData[proposal.id.toString()] = votes.toString();
-
-        // Check for submitted proofs for each milestone
-        proofData[proposal.id.toString()] = {};
-        const rejectionData = {};
-        for (let index = 0; index < proposal.milestones.length; index++) {
-          try {
-            const key = ethers.solidityPackedKeccak256(
-              ['uint256', 'uint256', 'address'],
-              [proposal.id, index, proposal.ngo]
-            );
-            const proofId = await proofOracle.proofIndex(key);
-
-              if (proofId > 0) {
-              // Fetch proof details to check if it was rejected or needs review
-              const proof = await proofOracle.getProof(proofId);
-
-              if (proof.processed && !proof.approved) {
-                // Proof was rejected
-                rejectionData[index] = {
-                  rejected: true,
-                  reason: proof.reason || "No reason provided"
-                };
-                proofData[proposal.id.toString()][index] = 0; // Don't show as submitted
-              } else if (!proof.processed) {
-                // Proof is submitted but not yet processed - show for admin review
-                proofData[proposal.id.toString()][index] = Number(proofId);
-                rejectionData[index] = { rejected: false };
-              } else {
-                // Proof was approved (processed && approved)
-                proofData[proposal.id.toString()][index] = 0; // Hide review UI after approval
-                rejectionData[index] = { rejected: false };
-              }
-            } else {
-              proofData[proposal.id.toString()][index] = 0;
-              rejectionData[index] = { rejected: false };
-            }
-          } catch (error) {
-            console.error(`Error checking proof for proposal ${proposal.id} milestone ${index}:`, error);
-            proofData[proposal.id.toString()][index] = 0;
-            rejectionData[index] = { rejected: false };
-          }
-        }
-
-        // Store rejection data for this proposal
-        if (!rejectedProofsData[proposal.id.toString()]) {
-          rejectedProofsData[proposal.id.toString()] = {};
-        }
-        rejectedProofsData[proposal.id.toString()] = rejectionData;
-
-        const proposalInfo = {
-          id: proposal.id.toString(),
-          ngo: proposal.ngo,
-          milestones: proposal.milestones.map((milestone, index) => ({
-            index,
-            description: milestone.description,
-            amount: milestone.amount.toString(),
-            verified: milestone.verified, // Read directly from contract
-            proofHash: milestone.proofHash,
-            completed: false // Will be calculated based on current votes
-          })),
-          totalFunds: proposal.milestones.length > 0 ?
-            proposal.milestones[proposal.milestones.length - 1].amount.toString() : "0"
-          // Removed approved status since proposals are auto-approved when created
-        };
-
-        proposalData.push(proposalInfo);
+      // NGO only sees own proposals
+      if (isNGO && proposal.ngo.toLowerCase() !== account.toLowerCase()) {
+        console.log(
+          `Skipping proposal ${proposal.id} - NGO can only see own proposals`
+        );
+        continue;
       }
 
-      setProposals(proposalData);
-      setVoteCounts(voteData);
-      setSubmittedProofs(proofData);
-      setRejectedProofs(rejectedProofsData);
-    } catch (err) {
-      console.error("Failed to fetch proposals:", err);
-      setError(`Failed to fetch proposals: ${err.message || "Unknown error"}`);
-    } finally {
-      setLoading(false);
+      // Votes for this proposal
+      const votes = await votingManager
+        .getProposalVotes(proposal.id)
+        .catch(err => {
+          console.error(
+            `Failed to fetch votes for proposal ${proposal.id}:`,
+            err
+          );
+          return 0n; // fallback
+        });
+      voteData[proposal.id.toString()] = votes.toString();
+
+      const totalFundsBigInt = proposal.milestones.reduce(
+      (acc, m) => acc + m.amount,
+      0n
+      );
+
+      // Basic proposal info
+      const pInfo = {
+        id: proposal.id.toString(),
+        ngo: proposal.ngo,
+        milestones: proposal.milestones.map((milestone, index) => ({
+          index,
+          description: milestone.description,
+          amount: milestone.amount.toString(),
+          verified: milestone.verified,   // from ProposalManager
+          proofHash: milestone.proofHash,
+          completed: false,               // derived later if you want
+        })),
+        totalFunds: totalFundsBigInt
+      };
+
+      proposalData.push(pInfo);
     }
-  }, [account, isNGO, milestoneStatus]);
+
+    // 2) Now build proof state for ALL proposals/milestones from ProofOracle
+    const proofData = {};          // { [proposalId]: { [milestoneIndex]: submissionId } }
+    const rejectedProofsData = {}; // { [proposalId]: { [milestoneIndex]: { rejected, reason } } }
+
+    const totalProofs = await proofOracle.proofCount(); // public uint256 -> BigInt
+    const total = Number(totalProofs);
+
+    for (let submissionId = 0; submissionId < total; submissionId++) {
+      try {
+        const sub = await proofOracle.getSubmission(submissionId);
+        // sub has fields: proposalId, milestoneIndex, proofURL, ngo,
+        // submittedAt, processed, approved, reason
+
+        // Skip empty slots (shouldn't really happen, but safe)
+        if (!sub.submittedAt || sub.submittedAt === 0n) continue;
+
+        const propIdStr = sub.proposalId.toString();
+        const mIndex = Number(sub.milestoneIndex);
+
+        if (!proofData[propIdStr]) proofData[propIdStr] = {};
+        if (!rejectedProofsData[propIdStr]) rejectedProofsData[propIdStr] = {};
+
+        if (sub.processed && !sub.approved) {
+          // Rejected proof
+          rejectedProofsData[propIdStr][mIndex] = {
+            rejected: true,
+            reason: sub.reason || "No reason provided",
+          };
+          // No pending proof for review
+          if (proofData[propIdStr][mIndex] !== undefined) {
+            delete proofData[propIdStr][mIndex];
+          }
+        } else if (!sub.processed) {
+          // Submitted, pending admin review
+          proofData[propIdStr][mIndex] = submissionId;
+          rejectedProofsData[propIdStr][mIndex] = { rejected: false };
+        } else if (sub.processed && sub.approved) {
+          // Approved – milestone.verified should be true via ProposalManager
+          rejectedProofsData[propIdStr][mIndex] = { rejected: false };
+          if (proofData[propIdStr][mIndex] !== undefined) {
+            delete proofData[propIdStr][mIndex];
+          }
+        }
+      } catch (err) {
+        console.error(`Error reading submission ${submissionId}:`, err);
+      }
+    }
+
+    setProposals(proposalData);
+    setVoteCounts(voteData);
+    setSubmittedProofs(proofData);
+    setRejectedProofs(rejectedProofsData);
+  } catch (err) {
+    console.error("Failed to fetch proposals:", err);
+    setError(
+      `Failed to fetch proposals: ${err.message || "Unknown error"}`
+    );
+  } finally {
+    setLoading(false);
+  }
+}, [account, isNGO, milestoneStatus]);
+
 
   useEffect(() => {
     // Wait for status loading to complete before fetching proposals
@@ -355,8 +368,8 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
                   const currentVotes = voteCounts[p.id] || "0";
                   const currentMilestone = getCurrentMilestone(p.id, currentVotes, p.milestones);
                   const isCompleted = index <= currentMilestone;
-                  const proofId = submittedProofs[p.id]?.[index] || 0;
-                  const proofSubmitted = proofId > 0;
+                  const proofId = submittedProofs[p.id]?.[index];
+                  const proofSubmitted = proofId !== undefined && proofId !== null;
                   const isRejected = rejectedProofs[p.id]?.[index]?.rejected || false;
                   const rejectionReason = rejectedProofs[p.id]?.[index]?.reason || "";
                   const needsVerification = isCompleted && !m.verified && !proofSubmitted && !isRejected;

@@ -1,101 +1,151 @@
-import { createContext, useContext, useState, useEffect } from 'react';
-import { ethers } from 'ethers';
-import { 
-  calculateCurrentMilestone, 
-  shouldBlockVoting, 
+import { createContext, useContext, useState } from 'react';
+import {
+  calculateCurrentMilestone,
+  shouldBlockVoting,
   getMilestonesNeedingVerification as utilGetMilestonesNeedingVerification,
-  normalizeVoteCount 
 } from '../utils/milestoneUtils';
 
 const MilestoneContext = createContext();
 
 export const MilestoneProvider = ({ children }) => {
-  // Store milestone verification status: proposalId -> milestoneIndex -> { verified: boolean, proofUrl?: string, proofText?: string }
   const [milestoneStatus, setMilestoneStatus] = useState({});
-  
-  // Store milestone completion status: proposalId -> milestoneIndex -> boolean
+
   const [milestoneCompletion, setMilestoneCompletion] = useState({});
 
-  // Clear all milestone data
   const resetAllMilestones = () => {
-    console.log("Clearing all milestone data");
+    console.log('Clearing all milestone data');
     setMilestoneStatus({});
     setMilestoneCompletion({});
   };
 
-  // Calculate which milestone is currently reached based on votes
+  const resetProposalMilestones = (proposalId) => {
+    setMilestoneStatus((prev) => {
+      const next = { ...prev };
+      delete next[proposalId];
+      return next;
+    });
+
+    setMilestoneCompletion((prev) => {
+      const next = { ...prev };
+      delete next[proposalId];
+      return next;
+    });
+  };
+
   const getCurrentMilestone = (proposalId, currentVotes, milestones) => {
     return calculateCurrentMilestone(currentVotes, milestones);
   };
 
-  // Check if voting should be blocked for a proposal
   const isVotingBlocked = (proposalId, currentVotes, milestones) => {
-    return shouldBlockVoting(currentVotes, milestones, milestoneStatus[proposalId] || {});
+    const statusForProposal = milestoneStatus[proposalId] || {};
+    return shouldBlockVoting(currentVotes, milestones, statusForProposal);
   };
 
-  // Mark a milestone as verified
-  const verifyMilestone = (proposalId, milestoneIndex, proofData) => {
-    setMilestoneStatus(prev => ({
+  /**
+   * Mark that an NGO has submitted proof for a milestone.
+   * This does NOT verify it — admin still needs to call verifyMilestone.
+   */
+  const markProofSubmitted = (proposalId, milestoneIndex, proofData) => {
+    setMilestoneStatus((prev) => ({
       ...prev,
       [proposalId]: {
-        ...prev[proposalId],
+        ...(prev[proposalId] || {}),
         [milestoneIndex]: {
-          verified: true,
+          ...(prev[proposalId]?.[milestoneIndex] || {}),
+          verified: prev[proposalId]?.[milestoneIndex]?.verified || false,
           proofUrl: proofData.proofUrl,
           proofText: proofData.proofText,
-          verifiedAt: new Date().toISOString()
-        }
-      }
+          submittedAt: new Date().toISOString(),
+        },
+      },
     }));
   };
 
-  // Get milestones that need verification (completed but not verified)
-  const getMilestonesNeedingVerification = (proposalId, currentVotes, milestones) => {
-    const result = utilGetMilestonesNeedingVerification(currentVotes, milestones, milestoneStatus[proposalId] || {});
+  /**
+   * Mark a milestone as verified by admin.
+   * Keeps existing proofUrl/proofText if not overridden.
+   */
+  const verifyMilestone = (proposalId, milestoneIndex, proofData) => {
+    setMilestoneStatus((prev) => ({
+      ...prev,
+      [proposalId]: {
+        ...(prev[proposalId] || {}),
+        [milestoneIndex]: {
+          ...(prev[proposalId]?.[milestoneIndex] || {}),
+          verified: true,
+          proofUrl:
+            proofData?.proofUrl ??
+            prev[proposalId]?.[milestoneIndex]?.proofUrl,
+          proofText:
+            proofData?.proofText ??
+            prev[proposalId]?.[milestoneIndex]?.proofText,
+          verifiedAt: new Date().toISOString(),
+        },
+      },
+    }));
+  };
+
+  /**
+   * Milestones that are “reached” by votes but not verified yet.
+   * Used mainly for admin dashboards.
+   */
+  const getMilestonesNeedingVerification = (
+    proposalId,
+    currentVotes,
+    milestones
+  ) => {
+    const statusForProposal = milestoneStatus[proposalId] || {};
+    const result = utilGetMilestonesNeedingVerification(
+      currentVotes,
+      milestones,
+      statusForProposal
+    );
     console.log(`Milestones needing verification for ${proposalId}:`, result);
     return result;
   };
 
-  // Get the next milestone that can be worked on (all previous milestones verified)
+  /**
+   * Returns the next milestone index that can be worked on:
+   * - If there are completed but unverified milestones, returns the first such index
+   *   (NGO should focus on providing/clarifying proof for it).
+   * - If all completed milestones are verified, returns the next future milestone index.
+   * - If all milestones are completed & verified, returns null.
+   */
   const getNextAvailableMilestone = (proposalId, currentVotes, milestones) => {
-    const currentMilestone = getCurrentMilestone(proposalId, currentVotes, milestones);
-    
-    // Check if all completed milestones are verified
+    const currentMilestone = getCurrentMilestone(
+      proposalId,
+      currentVotes,
+      milestones
+    );
+
+    // Any completed milestone that is not verified blocks progress
     for (let i = 0; i <= currentMilestone; i++) {
       const isVerified = milestoneStatus[proposalId]?.[i]?.verified || false;
       if (!isVerified) {
-        return i; // This is the first unverified milestone
+        return i; // first unverified completed milestone
       }
     }
-    
-    // All completed milestones are verified, return next milestone to work towards
-    return currentMilestone + 1 < milestones.length ? currentMilestone + 1 : null;
-  };
 
-  // Reset milestone data for a proposal (useful when refreshing data)
-  const resetProposalMilestones = (proposalId) => {
-    setMilestoneStatus(prev => {
-      const newState = { ...prev };
-      delete newState[proposalId];
-      return newState;
-    });
-    setMilestoneCompletion(prev => {
-      const newState = { ...prev };
-      delete newState[proposalId];
-      return newState;
-    });
+    // All completed milestones verified — move to the next one, if any
+    const nextIndex = currentMilestone + 1;
+    return nextIndex < milestones.length ? nextIndex : null;
   };
-
+  
   const value = {
     milestoneStatus,
     milestoneCompletion,
+
+    // derived/calculation helpers
     getCurrentMilestone,
     isVotingBlocked,
-    verifyMilestone,
     getMilestonesNeedingVerification,
     getNextAvailableMilestone,
+
+    // mutation helpers
+    markProofSubmitted, // NGO calls this after submitProof tx
+    verifyMilestone,    // Admin calls this after verify tx
     resetProposalMilestones,
-    resetAllMilestones
+    resetAllMilestones,
   };
 
   return (
