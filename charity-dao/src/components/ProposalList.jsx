@@ -377,6 +377,9 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
                   <p className="text-2xl font-bold text-blue-600">
                     {ethers.formatEther(p.totalFunds)} ETH
                   </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    ({(parseFloat(ethers.formatEther(p.totalFunds)) * 1000).toLocaleString()} GOV votes needed)
+                  </p>
                 </div>
               </div>
 
@@ -417,10 +420,10 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
                       style={{
                         width: `${(() => {
                           try {
+                            // 1000 GOV = 1 ETH conversion
+                            const votesInETH = parseFloat(voteCounts[p.id] || "0") / 1000;
                             return Math.min(
-                              (parseFloat(voteCounts[p.id] || "0") /
-                                parseFloat(ethers.formatEther(p.totalFunds))) *
-                                100,
+                              (votesInETH / parseFloat(ethers.formatEther(p.totalFunds))) * 100,
                               100
                             );
                           } catch (error) {
@@ -442,15 +445,9 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
                 >
                   {(() => {
                     try {
-                      const percentage =
-                        (
-                          (parseFloat(voteCounts[p.id] || "0") /
-                            parseFloat(ethers.formatEther(p.totalFunds))) *
-                          100
-                        ).toFixed(1) + "%";
-                      return p.isSuspended
-                        ? `${percentage} (STOPPED)`
-                        : percentage;
+                      // 1000 GOV = 1 ETH conversion
+                      const votesInETH = parseFloat(voteCounts[p.id] || "0") / 1000;
+                      return ((votesInETH / parseFloat(ethers.formatEther(p.totalFunds))) * 100).toFixed(1) + "%";
                     } catch (error) {
                       console.error("Error calculating percentage:", error);
                       return p.isSuspended ? "0% (STOPPED)" : "0%";
@@ -502,7 +499,7 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
                           </p>
                           <div className="flex items-center justify-between">
                             <span className="text-sm text-gray-600">
-                              Target: {ethers.formatEther(m.amount)} ETH
+                              Target: {ethers.formatEther(m.amount)} ETH ({(parseFloat(ethers.formatEther(m.amount)) * 1000).toLocaleString()} votes)
                             </span>
                             <div className="flex space-x-2">
                               <span

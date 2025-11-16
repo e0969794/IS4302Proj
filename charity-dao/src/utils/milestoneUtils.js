@@ -6,24 +6,23 @@ import { ethers } from 'ethers';
 
 /**
  * Convert various vote count formats to a consistent ETH string format
+ * Note: 1000 GOV = 1 ETH, so we divide vote count by 1000
  */
 export const normalizeVoteCount = (voteCount) => {
   try {
+    let votes = 0;
+
     if (typeof voteCount === 'string') {
-      // If it's already in ETH format (e.g. "5.0"), return as is
-      if (!voteCount.includes('e') && parseFloat(voteCount) < 1000000) {
-        return voteCount;
-      }
-      // If it's in wei format, convert to ETH
-      return ethers.formatEther(voteCount);
+      votes = parseFloat(voteCount);
+    } else if (typeof voteCount === 'number') {
+      votes = voteCount;
+    } else if (typeof voteCount === 'bigint') {
+      votes = Number(voteCount);
     }
-    if (typeof voteCount === 'number') {
-      return voteCount.toString();
-    }
-    if (typeof voteCount === 'bigint') {
-      return ethers.formatEther(voteCount);
-    }
-    return "0";
+
+    // Convert GOV votes to ETH equivalent (1000 GOV = 1 ETH)
+    const ethEquivalent = votes / 1000;
+    return ethEquivalent.toString();
   } catch (error) {
     console.error('Error normalizing vote count:', error);
     return "0";

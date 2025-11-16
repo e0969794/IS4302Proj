@@ -87,7 +87,7 @@ function DonateETH({ isNGO, isAdmin, statusLoading }) {
               value={amount}
               onChange={(e) => {
                 const val = e.target.value;
-                if (val === "" || (parseFloat(val) > 0 && !isNaN(val))) {
+                if (val === "" || (parseFloat(val) >= 0 && !isNaN(val))) {
                   setAmount(val);
                 }
               }}

@@ -125,7 +125,7 @@ function CreateProposal() {
               value={totalFunds}
               onChange={(e) => {
                 const val = e.target.value;
-                if (val === "" || (parseFloat(val) > 0 && !isNaN(val))) {
+                if (val === "" || (parseFloat(val) >= 0 && !isNaN(val))) {
                   setTotalFunds(val);
                 }
               }}
@@ -194,7 +194,7 @@ function CreateProposal() {
                       value={milestone.amount}
                       onChange={(e) => {
                       const val = e.target.value;
-                      if (val === "" || (parseFloat(val) > 0 && !isNaN(val))) {
+                      if (val === "" || (parseFloat(val) >= 0 && !isNaN(val))) {
                           handleMilestoneChange(index, "amount", val);
                         }
                       }}
