@@ -3,12 +3,12 @@
   "Pinata_API_Key": "e6fc4e22e30ef0386436",
   "Pinata_Secret_Key": "aade1962a5829164406e87194f3ed82b949865f9c0305e0aafb2e04060b3d414",
   "Pinata_Group_ID": "b2b75329-ed57-40d3-bff4-c0f46b57f84c",
-  "GovernanceToken": "0xA9e6Bfa2BF53dE88FEb19761D9b2eE2e821bF1Bf",
-  "Treasury": "0x1E3b98102e19D3a164d239BdD190913C2F02E756",
-  "NGOOracle": "0x4000F8820522AC96C4221b299876e3e53bCc8525",
-  "ProposalManager": "0x9338CA7d556248055f5751d85cDA7aD6eF254433",
-  "ProofOracle": "0x9c65f85425c619A6cB6D29fF8d57ef696323d188",
-  "VotingManager": "0x33E45b187da34826aBCEDA1039231Be46f1b05Af",
+  "GovernanceToken": "0x158d291D8b47F056751cfF47d1eEcd19FDF9B6f8",
+  "Treasury": "0x2F54D1563963fC04770E85AF819c89Dc807f6a06",
+  "NGOOracle": "0x325c8Df4CFb5B068675AFF8f62aA668D1dEc3C4B",
+  "ProposalManager": "0x4eaB29997D332A666c3C366217Ab177cF9A7C436",
+  "ProofOracle": "0x5Ffe31E4676D3466268e28a75E51d1eFa4298620",
+  "VotingManager": "0xa62835D1A6bf5f521C4e2746E1F51c923b8f3483",
   "mainProposalId": "6",
   "ngo1MilestoneReached": "6",
   "ngo2ActiveVoting": "7",
@@ -61,5 +61,5 @@
     "ngo2": "Medical supplies - Active voting (40/80 votes, 0.04 ETH), no milestones reached",
     "ngo3": "Educational books - Moderate votes (35/60 votes, 0.035 ETH), no milestones reached"
   },
-  "updatedAt": "2025-11-16T11:10:23.338Z"
+  "updatedAt": "2025-11-16T13:54:00.257Z"
 }
