@@ -68,7 +68,6 @@ async function main() {
     "Red Cross International - Humanitarian aid and disaster relief",
     "Save the Children - Education and health programs for children",
     "World Wildlife Fund - Environmental conservation and research",
-    "Global Health Corps - Improving healthcare access in underserved regions",
   ];
   const IpfsURL = staticFields.NGO_IPFS_URL || "ipfs://abcd";
   const numNGOs = ngoDetails.length; // Number of NGO wallets to generate
@@ -114,9 +113,9 @@ async function main() {
     });
   }
 
-    // Define initial parameters
-    const initialMintRate = ethers.parseEther("1000"); // 1000 GOV token per 1 ETH
-    const ethToSend = ethers.parseEther("100"); // 100 ETH per NGO wallet
+  // Define initial parameters
+  const initialMintRate = ethers.parseEther("1000"); // 1000 GOV token per 1 ETH
+  const ethToSend = ethers.parseEther("100"); // 100 ETH per NGO wallet
 
   // Deploy the GovernanceToken
   console.log("Deploying GovernanceToken...");
@@ -164,11 +163,9 @@ async function main() {
   }
 
   // Deploy NGOOracle with IPFS URL
-  // Note that the last NGO is unverified
+  // All NGOs are now verified
   console.log("Deploying NGOOracle...");
-  const ngoAddresses = wallets.ngo
-    .slice(0, numNGOs - 1)
-    .map((w) => w.signer.address);
+  const ngoAddresses = wallets.ngo.map((w) => w.signer.address);
   const NGOOracle = await ethers.getContractFactory("NGOOracle");
   const ngoOracle = await NGOOracle.deploy(ngoAddresses, IpfsURL);
   await ngoOracle.waitForDeployment();
@@ -492,9 +489,6 @@ async function main() {
   console.log(
     "NGO 3 (Verified): Educational books - Moderate votes (35/60 votes needed)"
   );
-  console.log(
-    "NGO 4 (UNVERIFIED): Cannot create proposals - Demo admin verification"
-  );
 
   console.log("\n=== VOTING COST DEMONSTRATION ===");
   if (mainEvent) {
@@ -566,14 +560,10 @@ async function main() {
   console.log(
     `  NGO 3 (VERIFIED): ${wallets.ngo[2].signer.address} - Educational books (moderate votes)`
   );
-  console.log(
-    `  NGO 4 (UNVERIFIED): ${wallets.ngo[3].signer.address} - Ready for admin verification demo`
-  );
 
   console.log("\nPrivate Keys for NGOs (for demo purposes):");
   wallets.ngo.forEach((w, i) => {
-    const status = i < 3 ? "VERIFIED" : "UNVERIFIED";
-    console.log(`  NGO ${i + 1} (${status}): ${w.privateKey}`);
+    console.log(`  NGO ${i + 1} (VERIFIED): ${w.privateKey}`);
   });
   console.log("NGO IPFS:", IpfsURL);
 
@@ -605,12 +595,11 @@ async function main() {
   // Prepare NGO information with verification status
   const ngoInfo = {};
   wallets.ngo.forEach((w, i) => {
-    const isVerified = i < 3; // First 3 NGOs are verified, 4th is unverified
     ngoInfo[`ngo${i}`] = {
       address: w.signer.address,
       privateKey: w.privateKey,
-      verified: isVerified,
-      status: isVerified ? "VERIFIED" : "UNVERIFIED - Ready for admin demo",
+      verified: true,
+      status: "VERIFIED",
     };
   });
 
@@ -632,7 +621,6 @@ async function main() {
       ngo1: "Water well project - First milestone reached (105/100 votes, 0.105 ETH), awaiting proof submission",
       ngo2: "Medical supplies - Active voting (40/80 votes, 0.04 ETH), no milestones reached",
       ngo3: "Educational books - Moderate votes (35/60 votes, 0.035 ETH), no milestones reached",
-      ngo4: "UNVERIFIED - Use admin panel to verify this NGO for demonstration",
     },
     updatedAt: new Date().toISOString(),
   };

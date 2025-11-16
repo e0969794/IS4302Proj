@@ -3,12 +3,12 @@
   "Pinata_API_Key": "e6fc4e22e30ef0386436",
   "Pinata_Secret_Key": "aade1962a5829164406e87194f3ed82b949865f9c0305e0aafb2e04060b3d414",
   "Pinata_Group_ID": "b2b75329-ed57-40d3-bff4-c0f46b57f84c",
-  "GovernanceToken": "0x3347B4d90ebe72BeFb30444C9966B2B990aE9FcB",
-  "Treasury": "0x3155755b79aA083bd953911C92705B7aA82a18F9",
-  "NGOOracle": "0x1f10F3Ba7ACB61b2F50B9d6DdCf91a6f787C0E82",
-  "ProposalManager": "0x457cCf29090fe5A24c19c1bc95F492168C0EaFdb",
-  "ProofOracle": "0x525C7063E7C20997BaaE9bDa922159152D0e8417",
-  "VotingManager": "0x5fc748f1FEb28d7b76fa1c6B07D8ba2d5535177c",
+  "GovernanceToken": "0x927b167526bAbB9be047421db732C663a0b77B11",
+  "Treasury": "0x32EEce76C2C2e8758584A83Ee2F522D4788feA0f",
+  "NGOOracle": "0xFD6F7A6a5c21A3f503EBaE7a473639974379c351",
+  "ProposalManager": "0xa6e99A4ED7498b3cdDCBB61a6A607a4925Faa1B7",
+  "ProofOracle": "0x5302E909d1e93e30F05B5D6Eea766363D14F9892",
+  "VotingManager": "0x4bf010f1b9beDA5450a8dD702ED602A104ff65EE",
   "mainProposalId": "6",
   "ngo1MilestoneReached": "6",
   "ngo2ActiveVoting": "7",
@@ -54,19 +54,12 @@
       "privateKey": "0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e",
       "verified": true,
       "status": "VERIFIED"
-    },
-    "ngo3": {
-      "address": "0x14dC79964da2C08b23698B3D3cc7Ca32193d9955",
-      "privateKey": "0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356",
-      "verified": false,
-      "status": "UNVERIFIED - Ready for admin demo"
     }
   },
   "demoScenarios": {
     "ngo1": "Water well project - First milestone reached (105/100 votes, 0.105 ETH), awaiting proof submission",
     "ngo2": "Medical supplies - Active voting (40/80 votes, 0.04 ETH), no milestones reached",
-    "ngo3": "Educational books - Moderate votes (35/60 votes, 0.035 ETH), no milestones reached",
-    "ngo4": "UNVERIFIED - Use admin panel to verify this NGO for demonstration"
+    "ngo3": "Educational books - Moderate votes (35/60 votes, 0.035 ETH), no milestones reached"
   },
-  "updatedAt": "2025-11-16T04:37:51.507Z"
+  "updatedAt": "2025-11-16T06:47:34.338Z"
 }
