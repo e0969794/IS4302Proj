@@ -275,46 +275,55 @@ async function main() {
   }
 
   // Donor 0: Keep at Tier 0 (Base) - no votes
-  console.log("Donor 0: Staying at Tier 0 (Base tier)");
+  console.log("Donor 0: Staying at Tier 0 (Base tier) - no voting history");
 
   // Donor 1: Build to Tier 1
-  // Requirements: 3+ sessions, 3+ proposals, 3+ days, ≤7×mintRate avg votes
+  // Requirements: 3+ sessions, 3+ unique proposals, 3+ days active, ≤100 votes per session average
+  // But NOT meet Tier 2 requirements (5+ sessions, 5+ unique proposals, 7+ days)
   console.log("Building Donor 1 to Tier 1...");
   const voter1 = votingManager.connect(wallets.donor[1]);
 
-  // Vote on 3 different proposals over 4+ days (ensuring 3+ days requirement)
-  await voter1.vote(reputationProposals[0], 1); // Session 1, Proposal 1
+  // Vote on exactly 3 different proposals over exactly 3+ days (but less than 7)
+  await voter1.vote(reputationProposals[0], 5); // Session 1, Proposal 1 (5 votes)
   await advanceTime(2 * 24 * 60 * 60); // Advance 2 days
 
-  await voter1.vote(reputationProposals[1], 1); // Session 2, Proposal 2
-  await advanceTime(24 * 60 * 60); // Advance 1 day (total 3 days)
+  await voter1.vote(reputationProposals[1], 8); // Session 2, Proposal 2 (8 votes)
+  await advanceTime(2 * 24 * 60 * 60); // Advance 2 days (total 4 days)
 
-  await voter1.vote(reputationProposals[2], 1); // Session 3, Proposal 3
-  await advanceTime(24 * 60 * 60); // Advance 1 day (total 4 days)
+  await voter1.vote(reputationProposals[2], 12); // Session 3, Proposal 3 (12 votes)
+  // Total 4 days active, only 3 sessions, only 3 unique proposals
+  // This should qualify for Tier 1 but NOT Tier 2 (needs 5 sessions, 5 unique, 7+ days)
 
-  console.log("Donor 1 built to Tier 1: 3 sessions, 3 proposals, 4+ days");
+  // Total: 25 votes across 3 sessions = 8.33 avg votes per session (well under 100 limit)
+  console.log(
+    "Donor 1 built to Tier 1: 3 sessions, 3 unique proposals, 4 days, 8.33 avg votes/session"
+  );
 
   // Donor 2: Build to Tier 2
-  // Requirements: 5+ sessions, 4+ proposals, 7+ days, ≤5×mintRate avg votes
+  // Requirements: 5+ sessions, 5+ unique proposals, 7+ days active, ≤100 votes per session average
   console.log("Building Donor 2 to Tier 2...");
   const voter2 = votingManager.connect(wallets.donor[2]);
 
-  // Vote on 4 different proposals over 8+ days with 5+ sessions (ensuring 7+ days requirement)
-  await voter2.vote(reputationProposals[0], 1); // Session 1, Proposal 1
+  // Vote on all 5 different proposals over 8+ days with 5+ sessions
+  await voter2.vote(reputationProposals[0], 25); // Session 1, Proposal 1 (25 votes)
   await advanceTime(2 * 24 * 60 * 60); // Advance 2 days
 
-  await voter2.vote(reputationProposals[1], 1); // Session 2, Proposal 2
+  await voter2.vote(reputationProposals[1], 30); // Session 2, Proposal 2 (30 votes)
   await advanceTime(2 * 24 * 60 * 60); // Advance 2 days (total 4 days)
 
-  await voter2.vote(reputationProposals[2], 1); // Session 3, Proposal 3
+  await voter2.vote(reputationProposals[2], 20); // Session 3, Proposal 3 (20 votes)
   await advanceTime(2 * 24 * 60 * 60); // Advance 2 days (total 6 days)
 
-  await voter2.vote(reputationProposals[3], 1); // Session 4, Proposal 4
+  await voter2.vote(reputationProposals[3], 35); // Session 4, Proposal 4 (35 votes)
   await advanceTime(2 * 24 * 60 * 60); // Advance 2 days (total 8 days)
 
-  await voter2.vote(reputationProposals[0], 1); // Session 5, same proposal (total 5 sessions)
+  await voter2.vote(reputationProposals[4], 40); // Session 5, Proposal 5 (40 votes)
+  // No need to advance time after last vote as we already have 8+ days
 
-  console.log("Donor 2 built to Tier 2: 5 sessions, 4 proposals, 8+ days");
+  // Total: 150 votes across 5 sessions = 30 avg votes per session (well under 100 limit)
+  console.log(
+    "Donor 2 built to Tier 2: 5 sessions, 5 unique proposals, 8+ days, 30 avg votes/session"
+  );
 
   // Verify final reputations
   console.log("\nFinal Reputation Status:");
@@ -323,7 +332,7 @@ async function main() {
       wallets.donor[i].address
     );
     console.log(
-      `Donor ${i} (${wallets.donor[i].address}): Tier ${rep.tier}, Sessions: ${rep.sessions}, Unique: ${rep.uniqueProposals}, Days: ${rep.daysActive}`
+      `Donor ${i} (${wallets.donor[i].address}): Tier ${rep.tier}, Sessions: ${rep.sessions}, Unique: ${rep.uniqueProposals}, Days: ${rep.daysActive}, Avg votes/session: ${rep.avgVotesPerSession}`
     );
   }
 
@@ -354,16 +363,14 @@ async function main() {
     console.log(`NGO 1 main proposal created: ${ngo1MainProposalId}`);
 
     // Vote enough to reach first milestone (0.1 ETH = 100 votes needed with 1000:1 ratio)
-    // Using manageable vote amounts: 50 + 30 + 25 = 105 votes (exceeds 100 milestone)
+    // Using manageable vote amounts: 60 + 45 = 105 votes (exceeds 100 milestone)
+    // Avoid giving Donor 1 additional sessions to keep them at Tier 1
     console.log("Voting to reach NGO 1's first milestone (0.1 ETH target)...");
-    const voter1 = votingManager.connect(wallets.donor[1]);
-    await voter1.vote(ngo1MainProposalId, 50); // 50 votes (cost: 2500 tokens)
-
     const voter2 = votingManager.connect(wallets.donor[2]);
-    await voter2.vote(ngo1MainProposalId, 30); // 30 votes (cost: ~900 tokens)
+    await voter2.vote(ngo1MainProposalId, 60); // 60 votes (Donor 2 - Tier 2)
 
     const voter0 = votingManager.connect(wallets.donor[0]);
-    await voter0.vote(ngo1MainProposalId, 25); // 25 votes (cost: ~625 tokens)
+    await voter0.vote(ngo1MainProposalId, 45); // 45 votes (Donor 0 - Tier 0)
 
     // Total: 105 votes = 0.105 ETH > 0.1 ETH milestone threshold
     console.log(
@@ -430,8 +437,9 @@ async function main() {
     console.log(`NGO 3 main proposal created: ${ngo3MainProposalId}`);
 
     // Add moderate votes (need 60 votes, give 35)
-    const voter1_ngo3 = votingManager.connect(wallets.donor[1]);
-    await voter1_ngo3.vote(ngo3MainProposalId, 35); // 35 votes (need 60 for milestone)
+    // Use Donor 0 to avoid giving Donor 1 additional sessions
+    const voter0_ngo3 = votingManager.connect(wallets.donor[0]);
+    await voter0_ngo3.vote(ngo3MainProposalId, 35); // 35 votes (need 60 for milestone)
     console.log("NGO 3 has 35 votes but needs 60 for first milestone");
   }
 
@@ -507,8 +515,10 @@ async function main() {
       const rep = await votingManager.getVoterReputation(
         wallets.donor[i].address
       );
+      const tierName =
+        rep.tier === 0n ? "Base" : rep.tier === 1n ? "Good" : "Very Good";
       console.log(
-        `  Donor ${i} (Tier ${rep.tier}): ${ethers.formatEther(
+        `  Donor ${i} (Tier ${rep.tier} - ${tierName}): ${ethers.formatEther(
           cost
         )} ETH (${cost.toString()} wei)`
       );
@@ -524,8 +534,10 @@ async function main() {
       const rep = await votingManager.getVoterReputation(
         wallets.donor[i].address
       );
+      const tierName =
+        rep.tier === 0n ? "Base" : rep.tier === 1n ? "Good" : "Very Good";
       console.log(
-        `  Donor ${i} (Tier ${rep.tier}): ${ethers.formatEther(
+        `  Donor ${i} (Tier ${rep.tier} - ${tierName}): ${ethers.formatEther(
           cost
         )} ETH (${cost.toString()} wei)`
       );
@@ -547,7 +559,11 @@ async function main() {
     const rep = await votingManager.getVoterReputation(
       wallets.donor[i].address
     );
-    console.log(`  Donor ${i} (Tier ${rep.tier}): ${wallets.donor[i].address}`);
+    const tierName =
+      rep.tier === 0n ? "Base" : rep.tier === 1n ? "Good" : "Very Good";
+    console.log(
+      `  Donor ${i} (Tier ${rep.tier} - ${tierName}): ${wallets.donor[i].address}`
+    );
   }
 
   console.log("\nNGO Status:");

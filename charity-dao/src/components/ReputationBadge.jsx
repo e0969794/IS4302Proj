@@ -388,7 +388,7 @@ function ReputationBadge() {
                     <li>• 3+ voting sessions</li>
                     <li>• 3+ unique proposals voted on</li>
                     <li>• 3+ days of voting activity</li>
-                    <li>• Average ≤7 votes per session</li>
+                    <li>• Average ≤100 votes per session</li>
                   </ul>
                 </div>
 
@@ -404,9 +404,9 @@ function ReputationBadge() {
                   <p className="text-sm text-purple-700 mb-2">Requirements:</p>
                   <ul className="text-sm text-purple-600 space-y-1 ml-4">
                     <li>• 5+ voting sessions</li>
-                    <li>• 4+ unique proposals voted on</li>
+                    <li>• 5+ unique proposals voted on</li>
                     <li>• 7+ days of voting activity</li>
-                    <li>• Average ≤5 votes per session</li>
+                    <li>• Average ≤100 votes per session</li>
                   </ul>
                 </div>
               </div>

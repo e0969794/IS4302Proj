@@ -3,12 +3,12 @@
   "Pinata_API_Key": "e6fc4e22e30ef0386436",
   "Pinata_Secret_Key": "aade1962a5829164406e87194f3ed82b949865f9c0305e0aafb2e04060b3d414",
   "Pinata_Group_ID": "b2b75329-ed57-40d3-bff4-c0f46b57f84c",
-  "GovernanceToken": "0x927b167526bAbB9be047421db732C663a0b77B11",
-  "Treasury": "0x32EEce76C2C2e8758584A83Ee2F522D4788feA0f",
-  "NGOOracle": "0xFD6F7A6a5c21A3f503EBaE7a473639974379c351",
-  "ProposalManager": "0xa6e99A4ED7498b3cdDCBB61a6A607a4925Faa1B7",
-  "ProofOracle": "0x5302E909d1e93e30F05B5D6Eea766363D14F9892",
-  "VotingManager": "0x4bf010f1b9beDA5450a8dD702ED602A104ff65EE",
+  "GovernanceToken": "0xA9e6Bfa2BF53dE88FEb19761D9b2eE2e821bF1Bf",
+  "Treasury": "0x1E3b98102e19D3a164d239BdD190913C2F02E756",
+  "NGOOracle": "0x4000F8820522AC96C4221b299876e3e53bCc8525",
+  "ProposalManager": "0x9338CA7d556248055f5751d85cDA7aD6eF254433",
+  "ProofOracle": "0x9c65f85425c619A6cB6D29fF8d57ef696323d188",
+  "VotingManager": "0x33E45b187da34826aBCEDA1039231Be46f1b05Af",
   "mainProposalId": "6",
   "ngo1MilestoneReached": "6",
   "ngo2ActiveVoting": "7",
@@ -17,22 +17,22 @@
     "donor0": {
       "address": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
       "tier": "0",
-      "sessions": "2",
-      "uniqueProposals": "2",
+      "sessions": "3",
+      "uniqueProposals": "3",
       "daysActive": "0"
     },
     "donor1": {
       "address": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
-      "tier": "2",
-      "sessions": "5",
-      "uniqueProposals": "5",
-      "daysActive": "12"
+      "tier": "1",
+      "sessions": "3",
+      "uniqueProposals": "3",
+      "daysActive": "4"
     },
     "donor2": {
       "address": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
       "tier": "2",
       "sessions": "6",
-      "uniqueProposals": "5",
+      "uniqueProposals": "6",
       "daysActive": "8"
     }
   },
@@ -61,5 +61,5 @@
     "ngo2": "Medical supplies - Active voting (40/80 votes, 0.04 ETH), no milestones reached",
     "ngo3": "Educational books - Moderate votes (35/60 votes, 0.035 ETH), no milestones reached"
   },
-  "updatedAt": "2025-11-16T06:47:34.338Z"
+  "updatedAt": "2025-11-16T11:10:23.338Z"
 }

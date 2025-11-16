@@ -244,7 +244,7 @@ contract VotingManager is AccessControl, ReentrancyGuard {
      * - Requires minimum time span between first and last vote
      * - Penalizes users who cast too many votes per session (whale behavior)
      * - Rewards consistent participation over time
-     * - Thresholds scale with mint rate (higher mint rate = higher vote thresholds)
+     * - Fixed thresholds of 100 votes per session for tier qualification
      */
     function _getVoterReputationTier(address voter) internal view returns (uint256) {
         uint256 sessions = voterTotalSessions[voter];
@@ -264,32 +264,28 @@ contract VotingManager is AccessControl, ReentrancyGuard {
         // Calculate average votes per session (whale detection)
         uint256 avgVotesPerSession = totalVotes / sessions;
         
-        // Get mint rate to scale thresholds
-        // mintRate = tokens per ETH (e.g., 1 means 1 ETH = 1 token, 1000 means 1 ETH = 1000 tokens)
+        // Fixed thresholds for reputation tiers
+        // Whale threshold remains scaled to mint rate for detection
         uint256 mintRate = treasury.mintRate();
-        
-        // Scale thresholds based on mint rate
-        // Base thresholds are for mintRate = 1
-        // At mintRate = 1: whale = 10, tier2 = 5, tier1 = 7
-        // At mintRate = 1000: whale = 10000, tier2 = 5000, tier1 = 7000
         uint256 whaleThreshold = 10 * mintRate;
-        uint256 tier2MaxAvg = 5 * mintRate;
-        uint256 tier1MaxAvg = 7 * mintRate;
+        
+        // Fixed average votes per session thresholds (not dependent on mint rate)
+        uint256 tier2MaxAvg = 100; // Fixed at 100 votes per session for Tier 2
+        uint256 tier1MaxAvg = 100; // Fixed at 100 votes per session for Tier 1
         
         // WHALE DETECTION: If average votes per session is too high, likely a whale
-        // Genuine users typically vote 1-5x mintRate votes per session
-        // Whales dump 10x+ mintRate votes per session
+        // Whale threshold still scales with mint rate for proper detection
         if (avgVotesPerSession > whaleThreshold) {
             return 0; // No discount for whale behavior
         }
         
         // TIER 2 Requirements (Very Good Voter - Not a Whale)
         // - 5+ sessions (frequency)
-        // - 4+ unique proposals (diversity)
+        // - 5+ unique proposals (diversity)
         // - Active for 7+ days (consistency over time)
-        // - Average ≤ 5x mintRate votes per session (not whale dumping)
+        // - Average ≤ 100 votes per session (moderate usage)
         if (sessions >= 5 && 
-            uniqueProposals >= 4 && 
+            uniqueProposals >= 5 && 
             daysActive >= 7 &&
             avgVotesPerSession <= tier2MaxAvg) {
             return 2;
@@ -299,7 +295,7 @@ contract VotingManager is AccessControl, ReentrancyGuard {
         // - 3+ sessions (frequency)
         // - 3+ unique proposals (diversity)
         // - Active for 3+ days (some consistency)
-        // - Average ≤ 7x mintRate votes per session (moderate use)
+        // - Average ≤ 100 votes per session (moderate usage)
         if (sessions >= 3 && 
             uniqueProposals >= 3 && 
             daysActive >= 3 &&
