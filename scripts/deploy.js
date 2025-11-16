@@ -114,9 +114,9 @@ async function main() {
     });
   }
 
-  // Define initial parameters
-  const initialMintRate = ethers.parseEther("1000"); // 1 GOV token per 1 ETH
-  const ethToSend = ethers.parseEther("100"); // 100 ETH per NGO wallet
+    // Define initial parameters
+    const initialMintRate = ethers.parseEther("1000"); // 1000 GOV token per 1 ETH
+    const ethToSend = ethers.parseEther("100"); // 100 ETH per NGO wallet
 
   // Deploy the GovernanceToken
   console.log("Deploying GovernanceToken...");

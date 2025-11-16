@@ -7,7 +7,7 @@ describe("Oracles", function () {
     let ProposalManager, NGOOracle, ProofOracle;
     let proposalManager, ngoOracle, proofOracle;
     let admin;
-    let initialMintRate = 1;
+    let initialMintRate = ethers.parseEther("1000"); // Consistent with other tests
     // Wallets and Signers
     let wallets = {
         admin: null,
@@ -250,7 +250,7 @@ describe("Oracles", function () {
     it("Should allow NGO to submit a proof and revert if NGO address is not valid", async function () {
         const ngo = wallets.ngo[0].signer;
         const milestonesDesc = ["Build school", "Purchase books"];
-        const milestonesAmt = [ethers.parseEther("1"), ethers.parseEther("2")];
+        const milestonesAmt = [1, 2]; // Use raw vote counts, not parseEther
 
         // Create proposal
         await proposalManager.connect(ngo).createProposal(milestonesDesc, milestonesAmt);
@@ -271,7 +271,7 @@ describe("Oracles", function () {
             const ngo = wallets.ngo[0].signer;
             const ngo1 = wallets.ngo[1].signer;
             const milestonesDesc = ["Build school", "Purchase books"];
-            const milestonesAmt = [ethers.parseEther("1"), ethers.parseEther("2")];
+            const milestonesAmt = [1, 2]; // Use raw vote counts, not parseEther
 
             // Create proposal
             await proposalManager.connect(ngo).createProposal(milestonesDesc, milestonesAmt);
@@ -293,19 +293,19 @@ describe("Oracles", function () {
         it("Should allow ProofOracle to verify a proof", async function () {
             const ngo = wallets.ngo[0].signer;
             const milestonesDesc = ["Build school", "Purchase books"];
-            const milestonesAmt = [ethers.parseEther("1"), ethers.parseEther("2")];
+            const milestonesAmt = [1, 2]; // Use raw vote counts, not parseEther
 
             // Create proposal
             await proposalManager.connect(ngo).createProposal(milestonesDesc, milestonesAmt);
             const proofUrl = "ipfs://QmProof123";
             await proofOracle.connect(ngo).submitProof(1, 0, proofUrl);
-        
+
             // Verify proof
             const tx = await proofOracle
-                .connect(wallets.admin) 
+                .connect(wallets.admin)
                 .verifyProof(0, true, "valid proof");
             await expect(tx)
-                .to.emit(proofOracle, "ProofAprroved")
+                .to.emit(proofOracle, "ProofApproved")
                 .withArgs(0, true, "valid proof");
 
             const proposal = await proposalManager.getProposal(1);

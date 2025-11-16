@@ -50,7 +50,7 @@ contract ProofOracle is AccessControl {
     );
 
     // Emitted when admin records its decision
-    event ProofAprroved(
+    event ProofApproved(
         uint256 indexed submissionId,
         bool approved,
         string reason
@@ -144,7 +144,7 @@ contract ProofOracle is AccessControl {
         sub.approved = approved;
         sub.reason = reason;
 
-        emit ProofAprroved(submissionId, approved, reason);
+        emit ProofApproved(submissionId, approved, reason);
         
         if (approved) {
             // Call ProposalManager to verify the milestone
