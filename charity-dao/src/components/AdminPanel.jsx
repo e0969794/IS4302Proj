@@ -34,7 +34,10 @@ function AdminPanel() {
     try {
       setLoading(true);
       const { proofOracle } = await getContracts();
-      const tx = await proofOracle.emergencySuspendNGO(ngoAddress, suspendReason);
+      const tx = await proofOracle.emergencySuspendNGO(
+        ngoAddress,
+        suspendReason
+      );
       await tx.wait();
       alert("NGO suspended successfully!");
       setNgoAddress("");
@@ -56,15 +59,19 @@ function AdminPanel() {
     try {
       setLoading(true);
       const { proofOracle } = await getContracts();
-      const tx = await proofOracle.verifyProof(submissionId, proofApproval, proofReason);
+      const tx = await proofOracle.verifyProof(
+        submissionId,
+        proofApproval,
+        proofReason
+      );
       await tx.wait();
-      
+
       if (proofApproval) {
         alert("Proof approved successfully!");
       } else {
         alert("Proof rejected - NGO has been suspended!");
       }
-      
+
       setSubmissionId("");
       setProofReason("");
     } catch (error) {
@@ -86,8 +93,10 @@ function AdminPanel() {
       const { proposalManager } = await getContracts();
       const isSuspended = await proposalManager.isNGOSuspended(ngoAddress);
       const strikeCount = await proposalManager.getNGOStrikeCount(ngoAddress);
-      
-      alert(`NGO Status:\nSuspended: ${isSuspended}\nStrike Count: ${strikeCount}`);
+
+      alert(
+        `NGO Status:\nSuspended: ${isSuspended}\nStrike Count: ${strikeCount}`
+      );
     } catch (error) {
       console.error(error);
       alert("Status check failed: " + error.message);
@@ -99,7 +108,7 @@ function AdminPanel() {
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <h2 className="text-2xl font-bold mb-6">Admin Panel</h2>
-      
+
       {loading && (
         <div className="mb-4 p-3 bg-blue-100 text-blue-800 rounded">
           Processing transaction...
@@ -118,8 +127,8 @@ function AdminPanel() {
             className="border p-2 rounded"
             disabled={loading}
           />
-          <button 
-            onClick={handleApprove} 
+          <button
+            onClick={handleApprove}
             className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded disabled:opacity-50"
             disabled={loading}
           >
@@ -160,14 +169,16 @@ function AdminPanel() {
               className="border p-2 rounded flex-1 min-w-[200px]"
               disabled={loading}
             />
-            <button 
-              onClick={handleVerifyProof} 
+            <button
+              onClick={handleVerifyProof}
               className={`px-4 py-2 rounded text-white disabled:opacity-50 ${
-                proofApproval ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'
+                proofApproval
+                  ? "bg-green-500 hover:bg-green-600"
+                  : "bg-red-500 hover:bg-red-600"
               }`}
               disabled={loading}
             >
-              {proofApproval ? 'Approve Proof' : 'Reject Proof'}
+              {proofApproval ? "Approve Proof" : "Reject Proof"}
             </button>
           </div>
         </div>
@@ -186,8 +197,8 @@ function AdminPanel() {
               className="border p-2 rounded flex-1 min-w-[300px]"
               disabled={loading}
             />
-            <button 
-              onClick={checkNGOStatus} 
+            <button
+              onClick={checkNGOStatus}
               className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50"
               disabled={loading}
             >
@@ -203,8 +214,8 @@ function AdminPanel() {
               className="border p-2 rounded flex-1 min-w-[200px]"
               disabled={loading}
             />
-            <button 
-              onClick={handleEmergencySuspend} 
+            <button
+              onClick={handleEmergencySuspend}
               className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded disabled:opacity-50"
               disabled={loading}
             >
@@ -218,10 +229,21 @@ function AdminPanel() {
       <div className="p-4 bg-gray-50 rounded-lg">
         <h4 className="font-semibold mb-2">Important Notes:</h4>
         <ul className="text-sm text-gray-600 space-y-1">
-          <li>• Rejecting a proof will automatically suspend the NGO (zero tolerance policy)</li>
-          <li>• Emergency suspend should only be used for severe violations (fraud, illegal activity)</li>
-          <li>• Suspended NGOs cannot create new proposals and all their active proposals are terminated</li>
-          <li>• Check NGO status to see current suspension status and strike count</li>
+          <li>
+            • Rejecting a proof will automatically suspend the NGO (zero
+            tolerance policy)
+          </li>
+          <li>
+            • Emergency suspend should only be used for severe violations
+            (fraud, illegal activity)
+          </li>
+          <li>
+            • Suspended NGOs cannot create new proposals and all their active
+            proposals are terminated
+          </li>
+          <li>
+            • Check NGO status to see current suspension status and strike count
+          </li>
         </ul>
       </div>
     </div>

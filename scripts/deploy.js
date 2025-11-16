@@ -229,7 +229,9 @@ async function main() {
   }
 
   // Create multiple proposals for reputation building and demonstration
-  console.log("Creating proposals for reputation building and demonstration...");
+  console.log(
+    "Creating proposals for reputation building and demonstration..."
+  );
   const reputationProposals = [];
   const ngo1 = proposalManager.connect(wallets.ngo[0].signer);
   const ngo2 = proposalManager.connect(wallets.ngo[1].signer);
@@ -330,15 +332,15 @@ async function main() {
 
   // Create main demonstration proposals for each verified NGO
   console.log("\nCreating main demonstration proposals...");
-  
+
   // NGO 1: Has milestone that passed vote threshold - awaiting proof submission
   console.log("Creating NGO 1 proposal (will reach milestone threshold)...");
   const ngo1MainDesc = ["Build water well", "Install water filtration system"];
   const ngo1MainAmt = [ethers.parseEther("0.1"), ethers.parseEther("0.2")]; // First milestone: 0.1 ETH (100 votes)
-  
+
   const ngo1MainTx = await ngo1.createProposal(ngo1MainDesc, ngo1MainAmt);
   const ngo1MainReceipt = await ngo1MainTx.wait();
-  
+
   const ngo1MainEvent = ngo1MainReceipt.logs
     .map((log) => {
       try {
@@ -348,36 +350,41 @@ async function main() {
       }
     })
     .find((e) => e && e.name === "ProposalCreated");
-  
+
   let ngo1MainProposalId = null;
   if (ngo1MainEvent) {
     ngo1MainProposalId = ngo1MainEvent.args.proposalId;
     console.log(`NGO 1 main proposal created: ${ngo1MainProposalId}`);
-    
+
     // Vote enough to reach first milestone (0.1 ETH = 100 votes needed with 1000:1 ratio)
     // Using manageable vote amounts: 50 + 30 + 25 = 105 votes (exceeds 100 milestone)
     console.log("Voting to reach NGO 1's first milestone (0.1 ETH target)...");
     const voter1 = votingManager.connect(wallets.donor[1]);
     await voter1.vote(ngo1MainProposalId, 50); // 50 votes (cost: 2500 tokens)
-    
+
     const voter2 = votingManager.connect(wallets.donor[2]);
-    await voter2.vote(ngo1MainProposalId, 30); // 30 votes (cost: ~900 tokens) 
-    
+    await voter2.vote(ngo1MainProposalId, 30); // 30 votes (cost: ~900 tokens)
+
     const voter0 = votingManager.connect(wallets.donor[0]);
     await voter0.vote(ngo1MainProposalId, 25); // 25 votes (cost: ~625 tokens)
-    
+
     // Total: 105 votes = 0.105 ETH > 0.1 ETH milestone threshold
-    console.log("NGO 1's first milestone reached (105 votes > 100 needed) - awaiting proof submission!");
+    console.log(
+      "NGO 1's first milestone reached (105 votes > 100 needed) - awaiting proof submission!"
+    );
   }
-  
+
   // NGO 2: Regular proposal with some votes but no milestones reached yet
   console.log("Creating NGO 2 proposal (active voting)...");
-  const ngo2MainDesc = ["Medical supplies for rural clinic", "Training for healthcare workers"];
+  const ngo2MainDesc = [
+    "Medical supplies for rural clinic",
+    "Training for healthcare workers",
+  ];
   const ngo2MainAmt = [ethers.parseEther("0.08"), ethers.parseEther("0.15")]; // 80 and 150 votes needed
-  
+
   const ngo2MainTx = await ngo2.createProposal(ngo2MainDesc, ngo2MainAmt);
   const ngo2MainReceipt = await ngo2MainTx.wait();
-  
+
   const ngo2MainEvent = ngo2MainReceipt.logs
     .map((log) => {
       try {
@@ -387,26 +394,29 @@ async function main() {
       }
     })
     .find((e) => e && e.name === "ProposalCreated");
-  
+
   let ngo2MainProposalId = null;
   if (ngo2MainEvent) {
     ngo2MainProposalId = ngo2MainEvent.args.proposalId;
     console.log(`NGO 2 main proposal created: ${ngo2MainProposalId}`);
-    
+
     // Add some votes but not enough for milestone (need 80 votes, give 40)
     const voter0_ngo2 = votingManager.connect(wallets.donor[0]);
     await voter0_ngo2.vote(ngo2MainProposalId, 40); // 40 votes (need 80 for milestone)
     console.log("NGO 2 has 40 votes but needs 80 for first milestone");
   }
-  
+
   // NGO 3: Another proposal with different progress
   console.log("Creating NGO 3 proposal (different voting pattern)...");
-  const ngo3MainDesc = ["Educational books for school library", "Computer lab setup"];
+  const ngo3MainDesc = [
+    "Educational books for school library",
+    "Computer lab setup",
+  ];
   const ngo3MainAmt = [ethers.parseEther("0.06"), ethers.parseEther("0.12")]; // 60 and 120 votes needed
-  
+
   const ngo3MainTx = await ngo3.createProposal(ngo3MainDesc, ngo3MainAmt);
   const ngo3MainReceipt = await ngo3MainTx.wait();
-  
+
   const ngo3MainEvent = ngo3MainReceipt.logs
     .map((log) => {
       try {
@@ -416,12 +426,12 @@ async function main() {
       }
     })
     .find((e) => e && e.name === "ProposalCreated");
-  
+
   let ngo3MainProposalId = null;
   if (ngo3MainEvent) {
     ngo3MainProposalId = ngo3MainEvent.args.proposalId;
     console.log(`NGO 3 main proposal created: ${ngo3MainProposalId}`);
-    
+
     // Add moderate votes (need 60 votes, give 35)
     const voter1_ngo3 = votingManager.connect(wallets.donor[1]);
     await voter1_ngo3.vote(ngo3MainProposalId, 35); // 35 votes (need 60 for milestone)
@@ -473,15 +483,25 @@ async function main() {
   // Demonstrate voting cost differences
   // Display current proposal states
   console.log("\n=== PROPOSAL STATUS SUMMARY ===");
-  console.log("NGO 1 (Verified): Water well project - First milestone REACHED (105/100 votes, awaiting proof)");
-  console.log("NGO 2 (Verified): Medical supplies - Active voting (40/80 votes needed)");
-  console.log("NGO 3 (Verified): Educational books - Moderate votes (35/60 votes needed)");
-  console.log("NGO 4 (UNVERIFIED): Cannot create proposals - Demo admin verification");
+  console.log(
+    "NGO 1 (Verified): Water well project - First milestone REACHED (105/100 votes, awaiting proof)"
+  );
+  console.log(
+    "NGO 2 (Verified): Medical supplies - Active voting (40/80 votes needed)"
+  );
+  console.log(
+    "NGO 3 (Verified): Educational books - Moderate votes (35/60 votes needed)"
+  );
+  console.log(
+    "NGO 4 (UNVERIFIED): Cannot create proposals - Demo admin verification"
+  );
 
   console.log("\n=== VOTING COST DEMONSTRATION ===");
   if (mainEvent) {
     const mainProposalId = mainEvent.args.proposalId;
-    console.log(`Using NGO 1's proposal (${mainProposalId}) for cost comparison:`);
+    console.log(
+      `Using NGO 1's proposal (${mainProposalId}) for cost comparison:`
+    );
 
     console.log("\nVoting cost comparison for 5 votes:");
     for (let i = 0; i < wallets.donor.length; i++) {
@@ -535,13 +555,21 @@ async function main() {
     );
     console.log(`  Donor ${i} (Tier ${rep.tier}): ${wallets.donor[i].address}`);
   }
-  
+
   console.log("\nNGO Status:");
-  console.log(`  NGO 1 (VERIFIED): ${wallets.ngo[0].signer.address} - Water well project (milestone reached)`);
-  console.log(`  NGO 2 (VERIFIED): ${wallets.ngo[1].signer.address} - Medical supplies (active voting)`);
-  console.log(`  NGO 3 (VERIFIED): ${wallets.ngo[2].signer.address} - Educational books (moderate votes)`);
-  console.log(`  NGO 4 (UNVERIFIED): ${wallets.ngo[3].signer.address} - Ready for admin verification demo`);
-  
+  console.log(
+    `  NGO 1 (VERIFIED): ${wallets.ngo[0].signer.address} - Water well project (milestone reached)`
+  );
+  console.log(
+    `  NGO 2 (VERIFIED): ${wallets.ngo[1].signer.address} - Medical supplies (active voting)`
+  );
+  console.log(
+    `  NGO 3 (VERIFIED): ${wallets.ngo[2].signer.address} - Educational books (moderate votes)`
+  );
+  console.log(
+    `  NGO 4 (UNVERIFIED): ${wallets.ngo[3].signer.address} - Ready for admin verification demo`
+  );
+
   console.log("\nPrivate Keys for NGOs (for demo purposes):");
   wallets.ngo.forEach((w, i) => {
     const status = i < 3 ? "VERIFIED" : "UNVERIFIED";
@@ -582,7 +610,7 @@ async function main() {
       address: w.signer.address,
       privateKey: w.privateKey,
       verified: isVerified,
-      status: isVerified ? "VERIFIED" : "UNVERIFIED - Ready for admin demo"
+      status: isVerified ? "VERIFIED" : "UNVERIFIED - Ready for admin demo",
     };
   });
 
@@ -591,16 +619,20 @@ async function main() {
     ...staticFields,
     ...addressFields,
     mainProposalId: mainEvent ? mainEvent.args.proposalId.toString() : "1",
-    ngo1MilestoneReached: ngo1MainProposalId ? ngo1MainProposalId.toString() : null,
+    ngo1MilestoneReached: ngo1MainProposalId
+      ? ngo1MainProposalId.toString()
+      : null,
     ngo2ActiveVoting: ngo2MainProposalId ? ngo2MainProposalId.toString() : null,
-    ngo3ModerateVotes: ngo3MainProposalId ? ngo3MainProposalId.toString() : null,
+    ngo3ModerateVotes: ngo3MainProposalId
+      ? ngo3MainProposalId.toString()
+      : null,
     donors: donorInfo,
     ngos: ngoInfo,
     demoScenarios: {
       ngo1: "Water well project - First milestone reached (105/100 votes, 0.105 ETH), awaiting proof submission",
       ngo2: "Medical supplies - Active voting (40/80 votes, 0.04 ETH), no milestones reached",
-      ngo3: "Educational books - Moderate votes (35/60 votes, 0.035 ETH), no milestones reached", 
-      ngo4: "UNVERIFIED - Use admin panel to verify this NGO for demonstration"
+      ngo3: "Educational books - Moderate votes (35/60 votes, 0.035 ETH), no milestones reached",
+      ngo4: "UNVERIFIED - Use admin panel to verify this NGO for demonstration",
     },
     updatedAt: new Date().toISOString(),
   };
