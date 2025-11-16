@@ -28,6 +28,7 @@ interface IProposalManager {
     function getMilestoneStatus(uint256 proposalId, uint256 milestoneIndex) external view returns (bool);
     function getMilestoneReleaseStatus(uint256 proposalId, uint256 milestoneIndex) external view returns (bool);
     function updateMilestoneReleaseStatus(uint256 proposalId, uint256 milestoneIndex) external;
+    function isNGOSuspended(address ngo) external view returns (bool);
 }
 
 interface ITreasury {
@@ -152,8 +153,11 @@ contract VotingManager is AccessControl, ReentrancyGuard {
         // 2. Check if the proposal is valid (active)
         require(_isProposalValid(proposalId), "Proposal not valid");
 
-        // 3. Check if the proposal is already complete
+        // 2.1. Check if the NGO is suspended (prevent voting on suspended NGO proposals)
         IProposalManager.Proposal memory p = proposalManager.getProposal(proposalId);
+        require(!proposalManager.isNGOSuspended(p.ngo), "Cannot vote on proposals from suspended NGOs");
+
+        // 3. Check if the proposal is already complete
         require(nextMilestone < p.milestones.length, "Proposal already fully funded");
 
         // 4. Apply logic (only if we're past milestone 0)

@@ -10,6 +10,14 @@ contract ProposalManager {
 
     address public proofOracle;
     uint256 public nextProposalId;
+    
+    // NEW: NGO suspension system
+    mapping(address => bool) public suspendedNGOs;
+    mapping(address => uint256) public ngoStrikeCount;
+    uint256 public constant MAX_STRIKES = 1; // Suspend after 1 invalid proof
+    
+    event NGOSuspended(address indexed ngo, uint256 totalStrikes, string reason);
+    event NGOStrikeAdded(address indexed ngo, uint256 newStrikeCount, uint256 proposalId, uint256 milestoneIndex);
 
     struct Milestone {
         string description;
@@ -75,6 +83,7 @@ contract ProposalManager {
             "Mismatched milestones"
         );
 
+        require(!suspendedNGOs[msg.sender], "NGO is suspended from creating proposals");
         require(ngoOracle.verifyNGO(msg.sender), "NGO address not approved");
         
         uint256 proposalId = nextProposalId++;
@@ -244,5 +253,76 @@ contract ProposalManager {
         // Checks if ID is in range (less than nextProposalId)
         // and if the proposal ID is not 0 (meaning it's active)
         return (proposalId < nextProposalId && proposals[proposalId].id != 0);
+    }
+
+    /**
+     * @notice Add a strike to an NGO for submitting invalid proof
+     * @dev Only callable by ProofOracle. NGO is immediately suspended after first invalid proof
+     * @param ngo Address of the NGO to penalize
+     * @param proposalId ID of the proposal with invalid proof
+     * @param milestoneIndex Index of the milestone with invalid proof
+     */
+    function addNGOStrike(address ngo, uint256 proposalId, uint256 milestoneIndex) external {
+        require(msg.sender == proofOracle, "Only ProofOracle can add strikes");
+        
+        ngoStrikeCount[ngo]++;
+        emit NGOStrikeAdded(ngo, ngoStrikeCount[ngo], proposalId, milestoneIndex);
+        
+        // Immediately suspend NGO after first invalid proof
+        suspendedNGOs[ngo] = true;
+        
+        // Kill all active proposals from this NGO
+        _killAllNGOProposals(ngo);
+        
+        emit NGOSuspended(ngo, ngoStrikeCount[ngo], "Invalid proof submitted - zero tolerance policy");
+    }
+
+    /**
+     * @notice Manually suspend an NGO (emergency function)
+     * @dev Only callable by ProofOracle for severe violations
+     * @param ngo Address of the NGO to suspend
+     * @param reason Reason for the suspension
+     */
+    function suspendNGO(address ngo, string calldata reason) external {
+        require(msg.sender == proofOracle, "Only ProofOracle can suspend NGOs");
+        
+        suspendedNGOs[ngo] = true;
+        
+        // Kill all active proposals from this NGO
+        _killAllNGOProposals(ngo);
+        
+        emit NGOSuspended(ngo, ngoStrikeCount[ngo], reason);
+    }
+
+    /**
+     * @notice Kill all active proposals from a specific NGO
+     * @dev Internal function called when NGO is suspended
+     * @param ngo Address of the NGO whose proposals to kill
+     */
+    function _killAllNGOProposals(address ngo) internal {
+        for (uint256 i = 1; i < nextProposalId; i++) {
+            if (proposals[i].id != 0 && proposals[i].ngo == ngo) {
+                proposals[i].id = 0; // Mark as inactive
+                emit ProposalKilled(i, ngo);
+            }
+        }
+    }
+
+    /**
+     * @notice Check if an NGO is suspended
+     * @param ngo Address of the NGO to check
+     * @return True if NGO is suspended, false otherwise
+     */
+    function isNGOSuspended(address ngo) external view returns (bool) {
+        return suspendedNGOs[ngo];
+    }
+
+    /**
+     * @notice Get strike count for an NGO
+     * @param ngo Address of the NGO
+     * @return Number of strikes the NGO has
+     */
+    function getNGOStrikeCount(address ngo) external view returns (uint256) {
+        return ngoStrikeCount[ngo];
     }
 }

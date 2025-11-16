@@ -47,6 +47,16 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
         continue;
       }
 
+      // Check if NGO is suspended  
+      let isSuspended = false;
+      try {
+        isSuspended = await proposalManager.isNGOSuspended(proposal.ngo);
+        console.log(`NGO ${proposal.ngo} suspended status: ${isSuspended}`);
+      } catch (err) {
+        console.error(`Failed to check suspension status for NGO ${proposal.ngo}:`, err);
+        // Continue processing but assume not suspended if check fails
+      }
+
       // Votes for this proposal
       const votes = await votingManager
         .getProposalVotes(proposal.id)
@@ -68,6 +78,7 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
       const pInfo = {
         id: proposal.id.toString(),
         ngo: proposal.ngo,
+        isSuspended: isSuspended,  // Add suspended status
         milestones: proposal.milestones.map((milestone, index) => ({
           index,
           description: milestone.description,
@@ -262,14 +273,30 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
         {proposals.map((p) => (
           <div key={p.id.toString()} className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden hover:shadow-xl transition-shadow duration-300">
             {/* Proposal Header */}
-            <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-6 border-b border-gray-100">
+            <div className={`p-6 border-b border-gray-100 ${p.isSuspended ? 'bg-gradient-to-r from-red-50 to-red-100' : 'bg-gradient-to-r from-blue-50 to-purple-50'}`}>
               <div className="flex justify-between items-start mb-4">
                 <div>
-                  <h3 className="text-2xl font-bold text-gray-800 mb-2">
-                    Proposal #{p.id.toString()}
-                  </h3>
+                  <div className="flex items-center space-x-3 mb-2">
+                    <h3 className={`text-2xl font-bold ${p.isSuspended ? 'text-red-800' : 'text-gray-800'}`}>
+                      Proposal #{p.id.toString()}
+                    </h3>
+                    {p.isSuspended && (
+                      <span className="bg-red-500 text-white px-3 py-1 rounded-full text-sm font-bold animate-pulse">
+                        🚫 INVALIDATED
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center space-x-4 text-sm text-gray-600">
                     {(() => {
+                      if (p.isSuspended) {
+                        return (
+                          <span className="flex items-center">
+                            <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
+                            NGO Suspended - Proposal Invalidated
+                          </span>
+                        );
+                      }
+                      
                       const allMilestonesVerified = p.milestones?.every((m) => m.verified);
                       const currentVotes = voteCounts[p.id] || "0";
                       const currentMilestone = getCurrentMilestone(p.id, currentVotes, p.milestones);
@@ -291,8 +318,20 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
                         );
                       }
                     })()}
-                    <span>NGO: {p.ngo.slice(0, 6)}...{p.ngo.slice(-4)}</span>
+                    <span className={p.isSuspended ? 'text-red-700 font-semibold' : ''}>
+                      NGO: {p.ngo.slice(0, 6)}...{p.ngo.slice(-4)}
+                      {p.isSuspended && ' (SUSPENDED)'}
+                    </span>
                   </div>
+                  {p.isSuspended && (
+                    <div className="mt-2 p-2 bg-red-100 border border-red-300 rounded text-xs">
+                      <p className="text-red-800 font-semibold">⚠️ This proposal has been invalidated</p>
+                      <p className="text-red-700">
+                        The NGO has been suspended for submitting invalid proof. No further votes will be accepted,
+                        and any remaining funds will be returned to the treasury.
+                      </p>
+                    </div>
+                  )}
                 </div>
                 <div className="text-right">
                   <p className="text-sm text-gray-600">Total Funding Goal</p>
@@ -306,13 +345,14 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <span className="text-sm text-gray-600">Current Votes:</span>
-                  <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-medium">
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${p.isSuspended ? 'bg-red-100 text-red-800' : 'bg-purple-100 text-purple-800'}`}>
                     {(() => {
                       try {
-                        return (voteCounts[p.id] || "0") + " votes";
+                        const voteText = (voteCounts[p.id] || "0") + " votes";
+                        return p.isSuspended ? `${voteText} (FROZEN)` : voteText;
                       } catch (error) {
                         console.error("Error formatting vote count:", error);
-                        return "0 votes";
+                        return p.isSuspended ? "0 votes (FROZEN)" : "0 votes";
                       }
                     })()}
                   </span>
@@ -322,7 +362,7 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
                 <div className="flex-1 mx-4">
                   <div className="w-full bg-gray-200 rounded-full h-2">
                     <div 
-                      className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full transition-all duration-300"
+                      className={`h-2 rounded-full transition-all duration-300 ${p.isSuspended ? 'bg-gradient-to-r from-red-400 to-red-500' : 'bg-gradient-to-r from-blue-500 to-purple-600'}`}
                       style={{
                         width: `${(() => {
                           try {
@@ -341,14 +381,15 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
                   </div>
                 </div>
                 
-                <span className="text-sm text-gray-600">
+                <span className={`text-sm ${p.isSuspended ? 'text-red-600 font-semibold' : 'text-gray-600'}`}>
                   {(() => {
                     try {
-                      return ((parseFloat(voteCounts[p.id] || "0") / 
+                      const percentage = ((parseFloat(voteCounts[p.id] || "0") / 
                                parseFloat(ethers.formatEther(p.totalFunds))) * 100).toFixed(1) + "%";
+                      return p.isSuspended ? `${percentage} (STOPPED)` : percentage;
                     } catch (error) {
                       console.error("Error calculating percentage:", error);
-                      return "0%";
+                      return p.isSuspended ? "0% (STOPPED)" : "0%";
                     }
                   })()}
                 </span>
@@ -451,8 +492,8 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
                         </div>
                       )}
 
-                      {/* Show milestone proof upload for NGOs when THIS specific milestone needs verification OR was rejected */}
-                      {isNGO && account && p.ngo.toLowerCase() === account.toLowerCase() && (needsVerification || isRejected) && (
+                      {/* Show milestone proof upload for NGOs when THIS specific milestone needs verification OR was rejected - but not if suspended */}
+                      {isNGO && account && p.ngo.toLowerCase() === account.toLowerCase() && (needsVerification || isRejected) && !p.isSuspended && (
                         <ErrorBoundary>
                           <MilestoneProof
                             proposal={p}
@@ -461,6 +502,21 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
                             onProofSubmitted={fetchProposals}
                           />
                         </ErrorBoundary>
+                      )}
+
+                      {/* Show message for suspended NGO trying to upload proof */}
+                      {isNGO && account && p.ngo.toLowerCase() === account.toLowerCase() && (needsVerification || isRejected) && p.isSuspended && (
+                        <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                          <div className="flex items-start space-x-2">
+                            <span className="text-red-600 text-lg">🚫</span>
+                            <div>
+                              <p className="text-red-800 font-semibold text-sm">NGO Account Suspended</p>
+                              <p className="text-red-700 text-xs mt-1">
+                                Your NGO has been suspended for submitting invalid proof. You can no longer upload proofs or interact with proposals.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
                       )}
 
                       {/* Show proof review for admins when proof is submitted but not yet verified */}
@@ -477,8 +533,8 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
                 })}
               </div>
 
-              {/* Voting Section - Only show for regular users, not NGOs or admins */}
-              {!isNGO && !isAdmin && (
+              {/* Voting Section - Only show for regular users, not NGOs or admins, and not for suspended NGOs */}
+              {!isNGO && !isAdmin && !p.isSuspended && (
                 <div className="mt-6 pt-6 border-t border-gray-100">
                   <ErrorBoundary>
                     <VoteOnProposal
@@ -492,19 +548,43 @@ function ProposalList({ isNGO, isAdmin, statusLoading }) {
                   </ErrorBoundary>
                 </div>
               )}
+
+              {/* Show message for suspended proposal voting */}
+              {!isNGO && !isAdmin && p.isSuspended && (
+                <div className="mt-6 pt-6 border-t border-gray-100">
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <p className="text-red-700 text-sm">
+                      <strong>🚫 Voting Disabled:</strong> This proposal has been invalidated due to NGO suspension. 
+                      Voting is no longer possible for this project.
+                    </p>
+                  </div>
+                </div>
+              )}
               
               {/* Information section for NGOs and Admins */}
               {(isNGO || isAdmin) && (
                 <div className="mt-6 pt-6 border-t border-gray-100">
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <p className="text-blue-700 text-sm">
-                      {isNGO && (
+                  <div className={`border rounded-lg p-4 ${p.isSuspended ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-200'}`}>
+                    <p className={`text-sm ${p.isSuspended ? 'text-red-700' : 'text-blue-700'}`}>
+                      {isNGO && p.isSuspended && (
+                        <>
+                          <strong>🚫 Suspended NGO:</strong> Your NGO has been suspended for submitting invalid proof. 
+                          This proposal is invalidated and you cannot create new proposals or upload proofs.
+                        </>
+                      )}
+                      {isNGO && !p.isSuspended && (
                         <>
                           <strong>📋 Your Proposal:</strong> This is one of your charity project proposals. 
                           Only regular users can vote on proposals.
                         </>
                       )}
-                      {isAdmin && (
+                      {isAdmin && p.isSuspended && (
+                        <>
+                          <strong>👑 Admin View - Suspended NGO:</strong> This NGO has been suspended for invalid proof submission. 
+                          The proposal is invalidated and no further interactions are allowed.
+                        </>
+                      )}
+                      {isAdmin && !p.isSuspended && (
                         <>
                           <strong>👑 Admin View:</strong> You can view all proposals but cannot vote. 
                           Only regular users can vote on proposals.
