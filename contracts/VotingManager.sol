@@ -28,6 +28,7 @@ interface IProposalManager {
     function getMilestoneStatus(uint256 proposalId, uint256 milestoneIndex) external view returns (bool);
     function getMilestoneReleaseStatus(uint256 proposalId, uint256 milestoneIndex) external view returns (bool);
     function updateMilestoneReleaseStatus(uint256 proposalId, uint256 milestoneIndex) external;
+    function isNGOSuspended(address ngo) external view returns (bool);
 }
 
 interface ITreasury {
@@ -152,8 +153,11 @@ contract VotingManager is AccessControl, ReentrancyGuard {
         // 2. Check if the proposal is valid (active)
         require(_isProposalValid(proposalId), "Proposal not valid");
 
-        // 3. Check if the proposal is already complete
+        // 2.1. Check if the NGO is suspended (prevent voting on suspended NGO proposals)
         IProposalManager.Proposal memory p = proposalManager.getProposal(proposalId);
+        require(!proposalManager.isNGOSuspended(p.ngo), "Cannot vote on proposals from suspended NGOs");
+
+        // 3. Check if the proposal is already complete
         require(nextMilestone < p.milestones.length, "Proposal already fully funded");
 
         // 4. Apply logic (only if we're past milestone 0)
@@ -240,7 +244,7 @@ contract VotingManager is AccessControl, ReentrancyGuard {
      * - Requires minimum time span between first and last vote
      * - Penalizes users who cast too many votes per session (whale behavior)
      * - Rewards consistent participation over time
-     * - Thresholds scale with mint rate (higher mint rate = higher vote thresholds)
+     * - Fixed thresholds of 100 votes per session for tier qualification
      */
     function _getVoterReputationTier(address voter) internal view returns (uint256) {
         uint256 sessions = voterTotalSessions[voter];
@@ -260,32 +264,28 @@ contract VotingManager is AccessControl, ReentrancyGuard {
         // Calculate average votes per session (whale detection)
         uint256 avgVotesPerSession = totalVotes / sessions;
         
-        // Get mint rate to scale thresholds
-        // mintRate = tokens per ETH (e.g., 1 means 1 ETH = 1 token, 1000 means 1 ETH = 1000 tokens)
+        // Fixed thresholds for reputation tiers
+        // Whale threshold remains scaled to mint rate for detection
         uint256 mintRate = treasury.mintRate();
-        
-        // Scale thresholds based on mint rate
-        // Base thresholds are for mintRate = 1
-        // At mintRate = 1: whale = 10, tier2 = 5, tier1 = 7
-        // At mintRate = 1000: whale = 10000, tier2 = 5000, tier1 = 7000
         uint256 whaleThreshold = 10 * mintRate;
-        uint256 tier2MaxAvg = 5 * mintRate;
-        uint256 tier1MaxAvg = 7 * mintRate;
+        
+        // Fixed average votes per session thresholds (not dependent on mint rate)
+        uint256 tier2MaxAvg = 100; // Fixed at 100 votes per session for Tier 2
+        uint256 tier1MaxAvg = 100; // Fixed at 100 votes per session for Tier 1
         
         // WHALE DETECTION: If average votes per session is too high, likely a whale
-        // Genuine users typically vote 1-5x mintRate votes per session
-        // Whales dump 10x+ mintRate votes per session
+        // Whale threshold still scales with mint rate for proper detection
         if (avgVotesPerSession > whaleThreshold) {
             return 0; // No discount for whale behavior
         }
         
         // TIER 2 Requirements (Very Good Voter - Not a Whale)
         // - 5+ sessions (frequency)
-        // - 4+ unique proposals (diversity)
+        // - 5+ unique proposals (diversity)
         // - Active for 7+ days (consistency over time)
-        // - Average ≤ 5x mintRate votes per session (not whale dumping)
+        // - Average ≤ 100 votes per session (moderate usage)
         if (sessions >= 5 && 
-            uniqueProposals >= 4 && 
+            uniqueProposals >= 5 && 
             daysActive >= 7 &&
             avgVotesPerSession <= tier2MaxAvg) {
             return 2;
@@ -295,7 +295,7 @@ contract VotingManager is AccessControl, ReentrancyGuard {
         // - 3+ sessions (frequency)
         // - 3+ unique proposals (diversity)
         // - Active for 3+ days (some consistency)
-        // - Average ≤ 7x mintRate votes per session (moderate use)
+        // - Average ≤ 100 votes per session (moderate usage)
         if (sessions >= 3 && 
             uniqueProposals >= 3 && 
             daysActive >= 3 &&
@@ -343,12 +343,15 @@ contract VotingManager is AccessControl, ReentrancyGuard {
         uint256 previousVotes = userVotes[proposalId][msg.sender];
         uint256 totalVotes = previousVotes + newVotes;
 
-        // Calculate token cost with reputation-based discount
+        // Calculate token cost with reputation-based discount (returns plain number)
         uint256 tokensRequired = _calculateVoteCost(previousVotes, newVotes, msg.sender);
+        
+        // Convert tokens to Wei (multiply by 10^18) for burning
+        uint256 tokensRequiredInWei = tokensRequired * 1e18;
 
-        require(treasury.getTokenBalance(msg.sender) >= tokensRequired, "Insufficient credits");
+        require(treasury.getTokenBalance(msg.sender) >= tokensRequiredInWei, "Insufficient credits");
 
-        treasury.burnETH(msg.sender, tokensRequired);
+        treasury.burnETH(msg.sender, tokensRequiredInWei);
 
         userVotes[proposalId][msg.sender] = totalVotes;
         
@@ -357,7 +360,7 @@ contract VotingManager is AccessControl, ReentrancyGuard {
         
         //dont need to check if it doesnt exist because by default it is 0
         proposalVotesMapping[proposalId] += newVotes;
-        emit VoteCast(msg.sender, proposalId, voteId, newVotes, tokensRequired);
+        emit VoteCast(msg.sender, proposalId, voteId, newVotes, tokensRequiredInWei);
         _updateProposalAfterVote(proposalId);
     }   
 

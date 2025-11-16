@@ -46,19 +46,19 @@ contract Treasury is AccessControl, ReentrancyGuard {
     }
 
     function _weiToToken(uint256 weiAmount) internal view returns (uint256) {
-        return (weiAmount/1e18) * mintRate;
+        return (weiAmount * mintRate) / 1e18;
     }
 
     function _tokenToWei(uint256 tokenAmount) internal view returns (uint256) {
-        return tokenAmount/mintRate * 1e18;
+        return (tokenAmount * 1e18) / mintRate;
     }
 
 
     function _donate() internal {
         require(msg.value > 0, "zero ETH");
         require(mintRate > 0, "mintRate=0");
-//token amount = ether amount * mint rate
-        uint256 tokenAmount = _weiToToken(msg.value); // (msg.value/1e18) is ether, (msg.value/1e18) * mintrate is tokens
+        //token amount = ether amount * mint rate
+        uint256 tokenAmount = _weiToToken(msg.value);
         bytes32 donationId = keccak256(abi.encode(msg.sender, block.number, msg.value));
 
         token.mintOnDonation(msg.sender, tokenAmount, donationId);

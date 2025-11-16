@@ -7,6 +7,8 @@ interface IProposalManager {
     function verifyMilestone(uint256 proposalId, uint256 milestoneIndex,
         string calldata proofURL) external returns (bool);
     function isProposalOwner(uint256 proposalId, address ngo) external view returns (bool);
+    function addNGOStrike(address ngo, uint256 proposalId, uint256 milestoneIndex) external;
+    function suspendNGO(address ngo, string calldata reason) external;
 }
 
 interface INGOOracle {
@@ -48,7 +50,7 @@ contract ProofOracle is AccessControl {
     );
 
     // Emitted when admin records its decision
-    event ProofAprroved(
+    event ProofApproved(
         uint256 indexed submissionId,
         bool approved,
         string reason
@@ -142,7 +144,7 @@ contract ProofOracle is AccessControl {
         sub.approved = approved;
         sub.reason = reason;
 
-        emit ProofAprroved(submissionId, approved, reason);
+        emit ProofApproved(submissionId, approved, reason);
         
         if (approved) {
             // Call ProposalManager to verify the milestone
@@ -154,7 +156,8 @@ contract ProofOracle is AccessControl {
 
             sub.processed = success;
         } else {
-            // Admin rejected
+            // Admin rejected - add strike to NGO for invalid proof
+            proposalManager.addNGOStrike(sub.ngo, sub.proposalId, sub.milestoneIndex);
             sub.processed = true;
         }
     }
@@ -177,5 +180,16 @@ contract ProofOracle is AccessControl {
         for (uint256 i = 0; i < proofCount; i++) {
             if (!proofs[i].processed) count++;
         }
+    }
+
+    /**
+     * @notice Emergency suspend function for severe NGO violations
+     * @dev Only ORACLE_ADMIN can call this for cases like fraud, illegal activity, etc.
+     * @param ngo Address of the NGO to suspend immediately
+     * @param reason Detailed reason for the emergency suspension
+     */
+    function emergencySuspendNGO(address ngo, string calldata reason) external onlyRole(ORACLE_ADMIN) {
+        require(ngo != address(0), "Invalid NGO address");
+        proposalManager.suspendNGO(ngo, reason);
     }
 }

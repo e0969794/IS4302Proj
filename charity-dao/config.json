@@ -1,0 +1,65 @@
+{
+  "NGO_IPFS_URL": "ipfs://bafkreia5rlk3mbbetdtvfvgpzcm2yugwj3kyxnxy24s5yw72yt6caygtaa",
+  "Pinata_API_Key": "e6fc4e22e30ef0386436",
+  "Pinata_Secret_Key": "aade1962a5829164406e87194f3ed82b949865f9c0305e0aafb2e04060b3d414",
+  "Pinata_Group_ID": "b2b75329-ed57-40d3-bff4-c0f46b57f84c",
+  "GovernanceToken": "0xA9e6Bfa2BF53dE88FEb19761D9b2eE2e821bF1Bf",
+  "Treasury": "0x1E3b98102e19D3a164d239BdD190913C2F02E756",
+  "NGOOracle": "0x4000F8820522AC96C4221b299876e3e53bCc8525",
+  "ProposalManager": "0x9338CA7d556248055f5751d85cDA7aD6eF254433",
+  "ProofOracle": "0x9c65f85425c619A6cB6D29fF8d57ef696323d188",
+  "VotingManager": "0x33E45b187da34826aBCEDA1039231Be46f1b05Af",
+  "mainProposalId": "6",
+  "ngo1MilestoneReached": "6",
+  "ngo2ActiveVoting": "7",
+  "ngo3ModerateVotes": "8",
+  "donors": {
+    "donor0": {
+      "address": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+      "tier": "0",
+      "sessions": "3",
+      "uniqueProposals": "3",
+      "daysActive": "0"
+    },
+    "donor1": {
+      "address": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+      "tier": "1",
+      "sessions": "3",
+      "uniqueProposals": "3",
+      "daysActive": "4"
+    },
+    "donor2": {
+      "address": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "tier": "2",
+      "sessions": "6",
+      "uniqueProposals": "6",
+      "daysActive": "8"
+    }
+  },
+  "ngos": {
+    "ngo0": {
+      "address": "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
+      "privateKey": "0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a",
+      "verified": true,
+      "status": "VERIFIED"
+    },
+    "ngo1": {
+      "address": "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
+      "privateKey": "0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba",
+      "verified": true,
+      "status": "VERIFIED"
+    },
+    "ngo2": {
+      "address": "0x976EA74026E726554dB657fA54763abd0C3a0aa9",
+      "privateKey": "0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e",
+      "verified": true,
+      "status": "VERIFIED"
+    }
+  },
+  "demoScenarios": {
+    "ngo1": "Water well project - First milestone reached (105/100 votes, 0.105 ETH), awaiting proof submission",
+    "ngo2": "Medical supplies - Active voting (40/80 votes, 0.04 ETH), no milestones reached",
+    "ngo3": "Educational books - Moderate votes (35/60 votes, 0.035 ETH), no milestones reached"
+  },
+  "updatedAt": "2025-11-16T11:10:23.338Z"
+}

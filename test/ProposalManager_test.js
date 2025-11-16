@@ -5,7 +5,7 @@ describe("ProposalManager", function () {
     let ProposalManager, NGOOracle, proposalManager;
     let proposaltarget, ngoOracle, proposalId;
     let admin;
-    let initialMintRate = 1;
+    let initialMintRate = ethers.parseEther("1000"); // Consistent with other tests
     const milestonesDesc = ["Build school", "Purchase books"];
     const milestonesAmt = [1, 2];
     // Wallets and Signers

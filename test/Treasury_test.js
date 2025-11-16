@@ -4,7 +4,7 @@ const { ethers } = require("hardhat");
 describe("Treasury", function () {
     let GovernanceToken, govToken;
     let admin, donor1, ngo;
-    let initialMintRate = 1;
+    let initialMintRate = ethers.parseEther("1000");
 
     beforeEach(async function () {
     // Get signers
@@ -55,7 +55,7 @@ describe("Treasury", function () {
 
     it("Should handle ETH donation via donateETH and mint tokens", async function () {
         const donationAmount = ethers.parseEther("1");
-        const expectedMint = initialMintRate; // 1 Ether : 1 GovToken 
+        const expectedMint = initialMintRate; // 1 Ether : 1000 GovToken 
 
         const tx = await treasury
         .connect(donor1)
@@ -151,25 +151,27 @@ describe("Treasury", function () {
     it("Should allow admin (with DISBURSER_ROLE) to disburse funds", async function () {
         const tokensDonated = 2;
         const weiDonated = ethers.parseEther(tokensDonated.toString());
-        const tokensDisbursed = 1;
-        const weiDisbursed = ethers.parseEther(tokensDisbursed.toString());
-    
+        const tokensDisbursed = initialMintRate; // 1000×10^18 tokens (represents 1 ETH worth)
+        const weiDisbursed = ethers.parseEther("1"); // Expect 1 ETH to be disbursed
+
         // Donate ETH so Treasury has funds
-        await treasury.connect(donor1).donateETH({ value: weiDonated }); 
-        //^^now donor should have 2 token worth of funds 
+        await treasury.connect(donor1).donateETH({ value: weiDonated });
+        //^^now donor should have 2000×10^18 tokens (2 ETH × 1000 mintRate) 
         
         // Grant DISBURSER_ROLE to admin
         const disburserRole = await treasury.DISBURSER_ROLE();
         await treasury.connect(admin).grantRole(disburserRole, admin.address);
         
         const ngoBalanceBefore = await ethers.provider.getBalance(ngo.address);
-        
+
         const tx = await treasury
             .connect(admin)
             .disburseMilestoneFunds(ngo.address, tokensDisbursed);
         await tx.wait();
-        
+
         const ngoBalanceAfter = await ethers.provider.getBalance(ngo.address);
-        expect(ngoBalanceAfter).to.be.gt(ngoBalanceBefore);
+
+        // Verify NGO received exactly 1 ETH worth of funds
+        expect(ngoBalanceAfter - ngoBalanceBefore).to.equal(weiDisbursed);
     });
 });
